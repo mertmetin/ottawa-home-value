@@ -25,12 +25,18 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="db")
     ap.add_argument("--rounds", type=int, default=5000)
+    ap.add_argument("--no-tax", action="store_true", help="compare against the model without property tax")
     a = ap.parse_args()
     x, _ = pipeline.prepare(a.data)
     r = x["remarks"].fillna("").str.lower()
     x["no_rear"] = r.str.contains(FINISHES["no_rear"], regex=True).astype(float).where(x["remarks"].notna())
     x["premium_lot"] = r.str.contains(FINISHES["premium_lot"], regex=True).astype(float).where(x["remarks"].notna())
     variants = {"+ no rear neighbours": ["no_rear"], "+ no rear + premium lot": ["no_rear", "premium_lot"]}
+    drops = {}
+    if a.no_tax:
+        # Without the tax features, as the website would be if it stopped asking.
+        variants = {}
+        drops = {"- property tax": ["tax_annual", "tax_years_old"]}
     last = x["sale_date"].max()
     rows = []
     for w in range(WINDOWS):
@@ -44,9 +50,13 @@ def main():
         preds = {"baseline": train_gbm.fit(train, a.rounds, features=homeowner.FEATURES).predict(test)["estimate"].to_numpy()}
         for name, extra in variants.items():
             preds[name] = train_gbm.fit(train, a.rounds, features=homeowner.FEATURES + extra).predict(test)["estimate"].to_numpy()
+        for name, gone in drops.items():
+            feats = [f for f in homeowner.FEATURES if f not in gone]
+            preds[name] = train_gbm.fit(train, a.rounds, features=feats).predict(test)["estimate"].to_numpy()
         for name, p in preds.items():
             row = {"window": f"{start.date()}..{end.date()}", "model": name}
-            for seg, m in {"all": np.ones(len(y), bool), "freehold": fh, "freehold<=15y": new, "no-rear houses": flag}.items():
+            for seg, m in {"all": np.ones(len(y), bool), "freehold": fh, "freehold<=15y": new, "no-rear houses": flag,
+                           "condo": ~fh}.items():
                 row[seg] = evaluate.metrics(y[m], p[m]).get("mdape", np.nan)
                 if seg == "no-rear houses":
                     row["no-rear bias"] = float(np.median((p[m] - y[m]) / y[m]) * 100) if m.sum() else np.nan
@@ -57,9 +67,9 @@ def main():
     pd.set_option("display.width", 200)
     print(df.round(2).to_string(index=False))
     base = df[df.model == "baseline"].set_index("window")
-    for name in variants:
+    for name in [*variants, *drops]:
         v = df[df.model == name].set_index("window")
-        for seg in ["all", "freehold", "freehold<=15y", "no-rear houses"]:
+        for seg in ["all", "freehold", "condo", "freehold<=15y"]:
             d = (v[seg] - base[seg])
             print(f"{name:26s} {seg:15s} mean change {d.mean():+.2f} pts, better in {(d < 0).sum()}/{len(d)} windows")
 

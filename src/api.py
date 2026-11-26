@@ -124,6 +124,8 @@ def estimate(body: Answers):
         "comps": int(x["comp_n"].fillna(0).iloc[0]),
         "comps_km": round(float(x["comp_dist_km"].iloc[0]), 2) if pd.notna(x["comp_dist_km"].iloc[0]) else None,
         "as_of": str(as_of.date()),
+        # yours | typical (skipped: similar homes nearby) | replaced (under half of typical) | none
+        "tax": x.attrs.get("tax"),
     }
     if body.explain:
         keys, var = homeowner.variants(x, a)

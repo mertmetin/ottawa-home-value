@@ -64,7 +64,8 @@ RECALIB_N = 2000
 RECALIB_MIN = 500
 RECENT_DAYS = 30
 SNAPSHOT_COLS = ["sale_date", "lat", "lng", "city_region", "type_group", "property_type", "ppsf", "close_price",
-                 "parking_total", "garage_spaces", "lot_width", "lot_depth"]
+                 "parking_total", "garage_spaces", "lot_width", "lot_depth", "tax_annual", "sqft_mid", "basement_kind", "basement_finished",
+                 "has_basement", "garage_type"]
 
 
 def models_dir() -> Path:

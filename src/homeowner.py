@@ -172,20 +172,90 @@ LOT_NEAREST = 20      # same-type homes nearby that set a typical lot
 LOT_MAX_KM = 1.0
 
 
-def nearby_lots(hist: pd.DataFrame, ptype: str, lat: float, lng: float) -> pd.DataFrame:
-    """Lot widths and depths (feet) of the nearest same-type homes."""
-    need = {"lot_width", "lot_depth", "lat", "lng"}
-    if not need <= set(hist) or not (np.isfinite(lat) and np.isfinite(lng)):
+def nearby(hist: pd.DataFrame, ptype: str, lat: float, lng: float,
+           n: int = LOT_NEAREST, max_km: float = LOT_MAX_KM) -> pd.DataFrame:
+    """The nearest past sales of the same home type, with their distance (km)."""
+    if not {"lat", "lng"} <= set(hist) or not (np.isfinite(lat) and np.isfinite(lng)):
         return hist.iloc[:0]
-    h = hist[(hist["property_type"] == ptype)].dropna(subset=["lat", "lng"])
-    h = h.assign(lot_width=F.usable_width(h["lot_width"]),
-                 lot_depth=pd.to_numeric(h["lot_depth"], errors="coerce").where(lambda v: v.between(20, 400)))
-    h = h.dropna(subset=["lot_width"])
+    h = hist[hist["property_type"] == ptype].dropna(subset=["lat", "lng"])
     if h.empty:
         return h
     km = np.hypot(h["lat"] - lat, (h["lng"] - lng) * np.cos(np.radians(lat))) * 111.2
     h = h.assign(km=km.to_numpy())
-    return h[h["km"] <= LOT_MAX_KM].nsmallest(LOT_NEAREST, "km")
+    return h[h["km"] <= max_km].nsmallest(n, "km")
+
+
+def nearby_lots(hist: pd.DataFrame, ptype: str, lat: float, lng: float) -> pd.DataFrame:
+    """Lot widths and depths (feet) of the nearest same-type homes."""
+    if not {"lot_width", "lot_depth"} <= set(hist):
+        return hist.iloc[:0]
+    h = hist[hist["property_type"] == ptype]
+    h = h.assign(lot_width=F.usable_width(h["lot_width"]),
+                 lot_depth=pd.to_numeric(h["lot_depth"], errors="coerce").where(lambda v: v.between(20, 400)))
+    return nearby(h.dropna(subset=["lot_width"]), ptype, lat, lng)
+
+
+# --------------------------------------------------------------------------
+# Typical answers of similar homes nearby. Used (1) for a skipped or clearly
+# wrong tax bill: a blank tax reads to the model like a new build, which pushes
+# the estimate up; and (2) as the comparison in "what moved it": "your
+# finished basement vs what homes like yours nearby have", not "vs no answer".
+# --------------------------------------------------------------------------
+
+TAX_NEAREST, TAX_MAX_KM, TAX_MIN = 30, 2.0, 5
+TAX_TOO_LOW = 0.5   # under half the typical bill: probably one installment
+
+
+def _mode(s: pd.Series):
+    s = s.dropna()
+    return s.mode().iloc[0] if len(s) else None
+
+
+def typical(hist: pd.DataFrame, ptype: str, lat: float, lng: float, sqft: float) -> dict:
+    out = {}
+    near = nearby(hist, ptype, lat, lng, n=TAX_NEAREST, max_km=TAX_MAX_KM)
+    if near.empty:
+        return out
+    size = pd.to_numeric(near["sqft_mid"], errors="coerce") if "sqft_mid" in near else pd.Series(np.nan, index=near.index)
+    if "tax_annual" in near:
+        tax = pd.to_numeric(near["tax_annual"], errors="coerce").where(lambda v: v > 500)
+        per_sqft = (tax / size.where(size > 0)).dropna()
+        if np.isfinite(sqft) and sqft > 0 and len(per_sqft) >= TAX_MIN:
+            # Tax per square foot nearby times this home's size: a bigger home
+            # among smaller neighbours still gets a bigger bill.
+            out["tax"] = float(per_sqft.median() * sqft)
+        elif tax.notna().sum() >= TAX_MIN:
+            out["tax"] = float(tax.median())
+    if np.isfinite(sqft) and sqft > 0:
+        similar = near[(size / sqft).between(0.75, 1.33)]
+        if len(similar) >= TAX_MIN:
+            near = similar
+    if "basement_kind" in near and near["basement_kind"].notna().sum() >= TAX_MIN:
+        out["basement"] = {"basement_kind": _mode(near["basement_kind"]),
+                           "basement_finished": float(near["basement_finished"].median()),
+                           "has_basement": _mode(near["has_basement"])}
+    if "garage_spaces" in near and near["garage_spaces"].notna().sum() >= TAX_MIN:
+        g = _mode(near["garage_spaces"])
+        out["garage"] = {"garage_spaces": g, "garage_type": _mode(near.get("garage_type", pd.Series(dtype=object))),
+                         "parking_total": typical_parking(hist, ptype, g)}
+    return out
+
+
+def check_tax(row: dict, typ: dict) -> dict:
+    """Fill a skipped tax bill, replace one under half the typical bill.
+    Returns what was used, for the lead note."""
+    entered = row.get("tax_annual")
+    t = typ.get("tax")
+    if t is None:
+        return {"source": "yours" if np.isfinite(entered) else "none",
+                "amount": int(entered) if np.isfinite(entered) else None}
+    if not np.isfinite(entered):
+        row["tax_annual"] = t
+        return {"source": "typical", "amount": int(round(t, -1))}
+    if entered < TAX_TOO_LOW * t:
+        row["tax_annual"] = t
+        return {"source": "replaced", "entered": int(entered), "amount": int(round(t, -1))}
+    return {"source": "yours", "amount": int(entered)}
 
 
 def fill_lot(row: dict, hist: pd.DataFrame) -> bool:
@@ -215,9 +285,13 @@ def build(a: dict, hist: pd.DataFrame, as_of: pd.Timestamp | None = None) -> pd.
     if not row.get("city_region"):
         row["city_region"] = nearest_region(hist, row["lat"], row["lng"])
     filled = fill_lot(row, hist)
+    typ = typical(hist, row["property_type"], row["lat"], row["lng"], F.range_mid(row["sqft_range"]))
+    tax = check_tax(row, typ)
     df = data._normalise(pd.DataFrame([row]))
     x = F.location_features(F.property_features(df))
     x.attrs["lot_filled"] = filled
+    x.attrs["typical"] = typ
+    x.attrs["tax"] = tax
     f = F.floor_of(pd.Series([str(a.get("unit") or "")]))
     apt = row["property_type"] == "Condo Apartment"
     x["floor"] = float(f["floor"].iloc[0]) if apt else np.nan
@@ -225,7 +299,6 @@ def build(a: dict, hist: pd.DataFrame, as_of: pd.Timestamp | None = None) -> pd.
     x = F.market_features(x, hist[hist["sale_date"] < as_of])
     if pd.isna(x["parking_total"].iloc[0]):
         x["parking_total"] = typical_parking(hist, x["property_type"].iloc[0], x["garage_spaces"].iloc[0])
-    x.attrs["parking_unknown_garage"] = typical_parking(hist, x["property_type"].iloc[0], np.nan)
     upd = update_columns(a, float(x["age_years"].iloc[0]))
     for c, v in upd.items():
         x[c] = v
@@ -233,9 +306,11 @@ def build(a: dict, hist: pd.DataFrame, as_of: pd.Timestamp | None = None) -> pd.
 
 
 # --------------------------------------------------------------------------
-# What each answer is worth: the estimate without it, for "Your new roof adds
-# about $12,000". Market features don't depend on these answers, so variants
-# only change the answer's own columns.
+# What each answer is worth: the estimate with that answer swapped for the
+# usual one ("Your new roof adds about $12,000"). For tax, basement and garage
+# the usual answer is what similar homes nearby have; for updates, condition
+# and extras it is "not mentioned", as in most listings. Market features don't
+# depend on these answers, so variants only change the answer's own columns.
 # --------------------------------------------------------------------------
 
 def _unanswered(x: pd.DataFrame, key: str) -> pd.DataFrame | None:
@@ -248,16 +323,26 @@ def _unanswered(x: pd.DataFrame, key: str) -> pd.DataFrame | None:
     elif key == "hv_hwt":
         v["txt_hwt_owned"], v["txt_hwt_rental"] = 0.0, 0.0
     elif key == "hv_basement":
-        v[["basement_kind", "basement_finished", "has_basement"]] = [None, np.nan, np.nan]
+        b = x.attrs.get("typical", {}).get("basement")
+        if not b:
+            return None
+        for c, val in b.items():
+            v[c] = val
     elif key == "hv_garage":
-        v[["garage_spaces", "garage_type"]] = [np.nan, None]
-        v["parking_total"] = x.attrs.get("parking_unknown_garage", np.nan)
+        g = x.attrs.get("typical", {}).get("garage")
+        if not g:
+            return None
+        for c, val in g.items():
+            v[c] = val
     elif key == "hv_foundation":
         v["foundation_kind"] = None
     elif key == "hv_age":
         v[["age_years", "age_band"]] = [np.nan, None]
     elif key == "hv_tax":
-        v[["tax_annual", "tax_years_old"]] = [np.nan, np.nan]
+        t = x.attrs.get("typical", {}).get("tax")
+        if t is None:
+            return None
+        v["tax_annual"] = t
     elif key == "hv_central_air":
         v["has_ac"] = 0.0
     elif key == "hv_fireplace":

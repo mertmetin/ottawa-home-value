@@ -90,6 +90,17 @@ def test_psi_sees_a_shift():
     assert same["sqft_mid"] < 0.05 and moved["sqft_mid"] > 0.25 and moved["property_type"] > 0.25
 
 
+def test_tax_filled_or_replaced_from_similar_homes():
+    typ = {"tax": 6000.0}
+    row = {"tax_annual": np.nan}
+    assert homeowner.check_tax(row, typ) == {"source": "typical", "amount": 6000} and row["tax_annual"] == 6000
+    row = {"tax_annual": 1500.0}  # one quarterly installment
+    assert homeowner.check_tax(row, typ)["source"] == "replaced" and row["tax_annual"] == 6000
+    row = {"tax_annual": 5400.0}
+    assert homeowner.check_tax(row, typ) == {"source": "yours", "amount": 5400} and row["tax_annual"] == 5400
+    assert homeowner.check_tax({"tax_annual": np.nan}, {})["source"] == "none"
+
+
 def test_condo_floor_from_unit():
     f = __import__("src.features", fromlist=["x"]).floor_of(pd.Series(["1204", "305", "PH2", "7", "", "B12"]))
     assert f["floor"].tolist()[:2] == [12, 3] and f["floor"].iloc[2:].isna().all()
@@ -138,6 +149,12 @@ def test_api_estimates_and_reloads(first, world):
     # the site never sends a lot: typical nearby lot is filled in for houses
     x = homeowner.build(body, snap)
     assert x.attrs["lot_filled"] and x["lot_width"].iloc[0] > 0
+    # no tax given: the typical bill nearby, never a blank (a blank reads like a new build)
+    assert e["tax"]["source"] == "typical" and x["tax_annual"].iloc[0] > 0
+    # a typical tax answer moves the estimate little; it is compared to the typical bill, not to a blank
+    t = c.post("/v1/estimate", json={**body, "hv_tax": e["tax"]["amount"]}).json()
+    eff = {a["key"]: a["effect"] for a in t["answers"]}
+    assert abs(eff.get("hv_tax", 0)) < 0.03 * t["estimate"]
     bigger = c.post("/v1/estimate", json={**body, "hv_sqft": "2500-3000", "explain": False}).json()
     assert bigger["estimate"] > e["estimate"]
     assert c.post("/v1/estimate", json={**body, "property_type": "Castle"}).status_code == 422

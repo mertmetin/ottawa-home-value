@@ -1,14 +1,15 @@
-# Runs training / evaluation / the API next to the database that holds the
-# licensed data. CPU-only PyTorch keeps the image small enough for a 4 GB VPS.
+# Runs training / evaluation / the photo job / the API next to the database
+# that holds the licensed data. CPU-only PyTorch keeps the image small enough
+# for a 4 GB VPS. Mount the checkout at /app to run new code without a rebuild.
 #
 #   docker build -t ottawa-home-value .
 #   docker run --rm --network <db network> -e DATABASE_URL=... \
-#     -v $PWD/results:/app/results ottawa-home-value \
-#     python -m src.evaluate --data db --out results/real
+#     -v $PWD:/app ottawa-home-value python -m src.evaluate --data db --out results/real
 FROM python:3.12-slim
 WORKDIR /app
-ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 HF_HOME=/app/models/hf
+# Dependencies first (cached), against a stub package; the code comes last.
 COPY pyproject.toml README.md ./
-COPY src src
-RUN pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[db,api]"
+RUN mkdir src && touch src/__init__.py \
+ && pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[db,api,photos]"
 COPY . .

@@ -121,6 +121,25 @@ def generate(rows: int, seed: int = 7) -> pd.DataFrame:
             lot_d = round(float(np.clip(rng.normal(105, 15), 60, 250)), 2)
             parking = int(np.clip(round(rng.normal(3 if ptype == "Detached" else 2, 1)), 1, 8))
 
+        # Hidden condition (renovations, upkeep): moves the price, and the
+        # description and photos reveal it only partly, as in real listings.
+        condition = rng.normal(0, 1)
+        sale_year = pd.Timestamp(sale_dates[i]).year
+        roof_year = int(sale_year - rng.integers(0, 25))
+        furnace_year = int(sale_year - rng.integers(0, 25))
+        roof_new = float(sale_year - roof_year <= 5 and not is_condo)
+        furnace_new = float(sale_year - furnace_year <= 5)
+        detached = ptype in ("Detached", "Link", "Duplex", "Triplex")
+        foundation = None if ptype == "Condo Apartment" else (
+            rng.choice(["Concrete Block", "Stone"], p=[0.8, 0.2]) if age >= 40 and rng.random() < 0.5
+            else rng.choice(["Poured Concrete", "Concrete"]))
+        heat_source = "Electric" if ptype == "Condo Apartment" and rng.random() < 0.4 else (
+            "Oil" if age >= 40 and rng.random() < 0.08 else rng.choice(["Gas", "Propane", "Electric"], p=[0.94, 0.03, 0.03]))
+        garage_spaces = (2.0 if detached and rng.random() < 0.55 else 1.0) if garage in ("Attached", "Built-In", "Detached") else 0.0
+        kitchens = 2 if not is_condo and rng.random() < 0.04 else 1
+        fireplace = "Y" if rng.random() < (0.55 if not is_condo else 0.15) else "N"
+        pool = "Inground" if detached and rng.random() < 0.05 else "None"
+        rural = not is_condo and rng.random() < 0.05
         dist_dt = np.hypot((lat - 45.4236) * 111, (lng + 75.7009) * 78)
         t = (pd.Timestamp(sale_dates[i]) - pd.Timestamp("2024-01-01")).days / 30.44
         lp = (np.log(p1500) + (0.62 if is_condo else 0.72) * np.log(sqft / 1500) + prem
@@ -131,11 +150,40 @@ def generate(rows: int, seed: int = 7) -> pd.DataFrame:
               - 0.0025 * min(age, 60) + (0.06 if age >= 100 else 0)
               - 0.006 * min(dist_dt, 25)
               + market_index(np.array([t]))[0]
-              + rng.normal(0, 0.075))
+              + 0.06 * condition + 0.02 * roof_new + 0.015 * furnace_new
+              - (0.04 if heat_source == "Oil" else 0) - (0.02 if foundation == "Concrete Block" else 0)
+              + 0.035 * (garage_spaces >= 2) + 0.04 * (kitchens == 2) + 0.01 * (fireplace == "Y")
+              + 0.025 * (pool == "Inground") - 0.03 * rural
+              + rng.normal(0, 0.055))
         price = float(np.round(np.exp(lp), -3))
         assessed = price * rng.normal(0.72, 0.05)
         tax_year = int(rng.choice([pd.Timestamp(sale_dates[i]).year - 1, pd.Timestamp(sale_dates[i]).year], p=[0.7, 0.3]))
+        bits = [rng.choice(["Welcome home!", "Lovely family home.", "Great location.", "Bright and spacious."])]
+        if condition > 0.9:
+            bits.append(rng.choice(["Fully renovated kitchen and bathrooms.", "Move-in ready, shows beautifully.",
+                                    "Updated kitchen with quartz counters."]))
+        elif condition < -1.0:
+            bits.append(rng.choice(["Needs some TLC.", "Handyman special, sold as-is.", "Original kitchen."]))
+        if roof_new and rng.random() < 0.6:
+            bits.append(f"New roof {roof_year}.")
+        if furnace_new and rng.random() < 0.5:
+            bits.append(f"Furnace & A/C ({furnace_year}).")
+        bits.append(rng.choice(["HWT rental.", "Owned hot water tank.", ""]))
         recs.append({
+            "remarks": " ".join(b for b in bits if b),
+            "foundation": foundation,
+            "heat_source": heat_source,
+            "garage_spaces": garage_spaces,
+            "kitchens": kitchens,
+            "rooms_above": beds_above + int(rng.integers(2, 5)),
+            "fireplace": fireplace,
+            "family_room": "Y" if rng.random() < 0.6 else "N",
+            "central_vac": "Y" if rng.random() < 0.08 else "N",
+            "pool": pool,
+            "sewer": "Septic" if rural else "Sewer",
+            "water": "Well" if rural else "Municipal",
+            "exterior": None if is_condo else rng.choice(["Brick, Vinyl Siding", "Brick", "Vinyl Siding", "Stone, Vinyl Siding"]),
+            "_condition": condition,
             "listing_key": f"S{100000 + i}",
             "mls_status": "Sold",
             "property_type": ptype,
@@ -203,6 +251,32 @@ def generate(rows: int, seed: int = 7) -> pd.DataFrame:
     return df
 
 
+def synthetic_photos(df: pd.DataFrame, out: Path, seed: int = 7) -> None:
+    """Fake src.photos output: condition scores that track the hidden condition
+    with noise, random embeddings. Exercises the photo path without images."""
+    import sys
+
+    sys.path.insert(0, str(ROOT))
+    from src import photos
+
+    rng = np.random.default_rng(seed)
+    out.mkdir(parents=True, exist_ok=True)
+    for f in out.glob("chunk_*.npz"):
+        f.unlink()
+    n = len(df)
+    cond = df["_condition"].to_numpy()
+    zs = rng.normal(0, 1.5, size=(n, len(photos.ZS_NAMES)))
+    for j, name in enumerate(photos.ZS_NAMES):
+        if any(k in name for k in ("kitchen", "bath", "living", "luxury")):
+            zs[:, j] += 1.2 * cond
+        if "needs_work" in name:
+            zs[:, j] -= 1.2 * cond
+    emb = rng.normal(0, 1, size=(n, 512))
+    emb[:, 0] += cond
+    np.savez(out / "chunk_00000.npz", keys=df["listing_key"].to_numpy().astype(str), n=np.full(n, 8),
+             emb=emb.astype(np.float16), zs=zs.astype(np.float32))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--rows", type=int, default=6000)
@@ -210,6 +284,8 @@ def main():
     ap.add_argument("--out", default=str(ROOT / "data" / "sample.csv"))
     a = ap.parse_args()
     df = generate(a.rows, a.seed)
+    synthetic_photos(df, ROOT / "data" / "sample_photos", a.seed)
+    df = df.drop(columns="_condition")
     df.to_csv(a.out, index=False)
     print(f"wrote {len(df)} synthetic rows to {a.out}")
 

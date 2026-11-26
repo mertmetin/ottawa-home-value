@@ -42,11 +42,13 @@ NUMERIC = [
     "age_years", "basement_finished", "has_basement", "parking_total", "has_ac", "tax_annual",
     "tax_years_old", "condo_fee", "lat", "lng", "dist_downtown_km", "dist_station_km",
     "sale_month", "t_months",
+    "garage_spaces", "kitchens", "rooms_above", "fireplace_yn", "family_room_yn", "central_vac_yn",
+    "pool_inground", "septic", "well_water",
     "area_ppsf_90d", "area_n_90d", "city_ppsf_90d", "comp_price_med", "comp_ppsf_med", "comp_dist_km", "comp_n",
 ]
 CATEGORICAL = [
     "property_type", "type_group", "city_region", "basement_kind", "garage_type", "style", "heat_type",
-    "age_band", "sqft_range",
+    "age_band", "sqft_range", "foundation_kind", "heat_source", "exterior_kind",
 ]
 FEATURES = NUMERIC + CATEGORICAL
 TARGET = "log_price"
@@ -98,6 +100,22 @@ def _finished(s) -> float:
     if "Finished" in s:
         return 1.0
     return np.nan
+
+
+def _foundation(s) -> str | None:
+    """Poured / concrete -> concrete; block; stone; other. Block and stone mostly mean older homes."""
+    if s is None or s is pd.NA or (isinstance(s, float) and np.isnan(s)):
+        return None
+    s = str(s).lower()
+    for key, name in (("block", "block"), ("stone", "stone"), ("poured", "concrete"), ("concrete", "concrete"),
+                      ("wood", "wood"), ("slab", "slab")):
+        if key in s:
+            return name
+    return "other"
+
+
+def _has(col: pd.Series, word: str) -> pd.Series:
+    return col.map(lambda v: np.nan if v is None or v is pd.NA else float(word.lower() in str(v).lower()))
 
 
 # --------------------------------------------------------------------------
@@ -172,6 +190,13 @@ def property_features(df: pd.DataFrame) -> pd.DataFrame:
         lambda s: np.nan if s is None or s is pd.NA else float("None" not in str(s)))
     out["has_ac"] = out["cooling"].map(lambda s: np.nan if s is None or s is pd.NA else float("Central Air" in str(s)))
     out["tax_years_old"] = out["sale_date"].dt.year - out["tax_year"]
+    out["foundation_kind"] = out["foundation"].map(_foundation)
+    out["exterior_kind"] = out["exterior"].map(_basement_kind)  # sorted, comma-joined materials
+    for src, dst in (("fireplace", "fireplace_yn"), ("family_room", "family_room_yn"), ("central_vac", "central_vac_yn")):
+        out[dst] = out[src].map(lambda v: np.nan if v is None or v is pd.NA else float(v == "Y"))
+    out["pool_inground"] = _has(out["pool"], "Inground")
+    out["septic"] = _has(out["sewer"], "Septic")
+    out["well_water"] = _has(out["water"], "Well")
     out["condo_fee"] = out["condo_fee"].where(is_condo)
     out["sale_month"] = out["sale_date"].dt.month
     out["t_months"] = (out["sale_date"] - EPOCH).dt.days / 30.44
@@ -285,3 +310,48 @@ def baseline_estimate(x: pd.DataFrame) -> np.ndarray:
     est = est.where(est.notna(), x["comp_price_med"])
     est = est.where(est.notna(), x["area_ppsf_90d"] * x["sqft_mid"])
     return est.to_numpy()
+
+
+# --------------------------------------------------------------------------
+# Extra information: descriptions and photos (research feature sets)
+# --------------------------------------------------------------------------
+
+PHOTO_PCA = 16
+
+
+def photo_columns() -> list[str]:
+    from . import photos
+
+    return ["n_photos", *photos.ZS_NAMES, *[f"img_pc_{i}" for i in range(PHOTO_PCA)]]
+
+
+def add_extras(x: pd.DataFrame, photo_dir: str | None = None) -> pd.DataFrame:
+    """Description features (always, when remarks exist) and photo features
+    (when photo_dir holds the output of src.photos). Both are unsupervised:
+    nothing here sees a price."""
+    from . import text
+
+    out = x.copy()
+    if "remarks" in out:
+        upd = text.update_features(out["remarks"], out["sale_date"].dt.year)
+        out[upd.columns] = upd.to_numpy()
+        summ = text.summary_features(out["remarks"])
+        out[summ.columns] = summ.to_numpy()
+    if photo_dir:
+        from pathlib import Path
+
+        from sklearn.decomposition import PCA
+
+        from . import photos
+
+        keys, n, emb, zs = photos.load(Path(photo_dir))
+        cols = photo_columns()
+        p = pd.DataFrame(np.nan, index=range(len(keys)), columns=cols)
+        p["n_photos"] = n
+        p[photos.ZS_NAMES] = zs
+        ok = np.isfinite(emb.astype(float)).all(axis=1) & (n > 0)
+        if ok.sum() > PHOTO_PCA:
+            p.loc[ok, cols[-PHOTO_PCA:]] = PCA(PHOTO_PCA, random_state=42).fit_transform(emb[ok].astype(float))
+        p["listing_key"] = keys
+        out = out.drop(columns=[c for c in cols if c in out]).merge(p, on="listing_key", how="left")
+    return out

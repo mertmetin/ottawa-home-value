@@ -33,8 +33,20 @@ log = logging.getLogger("evaluate")
 PRICE_BANDS = [0, 400_000, 600_000, 800_000, 1_200_000, np.inf]
 BAND_LABELS = ["< $400K", "$400-600K", "$600-800K", "$800K-1.2M", "> $1.2M"]
 MODEL_NAMES = {"baseline": "Comps baseline", "gbm": "LightGBM", "nn": "Neural net (MLP)", "tabpfn": "TabPFN",
-               "gbm_notax": "LightGBM, no taxes"}
+               "gbm_notax": "LightGBM, no taxes", "gbm_updates": "+ updates (roof, furnace...)",
+               "gbm_text": "+ description", "gbm_photos": "+ photos", "gbm_all": "+ description + photos"}
 NO_TAX = [f for f in F.FEATURES if f not in ("tax_annual", "tax_years_old")]
+
+
+def variants() -> dict[str, list[str]]:
+    """LightGBM feature sets: what each kind of extra information adds."""
+    from . import text
+
+    upd = F.FEATURES + text.UPDATE_COLS
+    desc = upd + text.SUMMARY_COLS
+    pho = F.photo_columns()
+    return {"gbm_notax": NO_TAX, "gbm_updates": upd, "gbm_text": desc,
+            "gbm_photos": F.FEATURES + pho, "gbm_all": desc + pho}
 TABPFN_MAX_TRAIN = 10_000
 
 
@@ -143,8 +155,16 @@ def run_split(train: pd.DataFrame, test: pd.DataFrame, models: list[str]) -> tup
         extra["gbm_range"]["by"] = by
         extra["gbm_importance"] = g.importance().head(15).round(1).to_dict()
         extra["gbm_trees"] = g.models["mid"].num_trees()
-    if "gbm_notax" in models:
-        preds["gbm_notax"] = train_gbm.fit(train, features=NO_TAX).predict(test)["estimate"].to_numpy()
+    for name, feats in variants().items():
+        if name not in models:
+            continue
+        missing = [f for f in feats if f not in train]
+        if missing:
+            log.warning("%s skipped: no %s (photos need --photos)", name, missing[0])
+            continue
+        g2 = train_gbm.fit(train, features=feats)
+        preds[name] = g2.predict(test)["estimate"].to_numpy()
+        extra[f"{name}_importance"] = g2.importance().head(20).round(1).to_dict()
     if "nn" in models:
         t = time.time()
         n = train_nn.fit(train)
@@ -209,7 +229,8 @@ def write_report(out: Path, source: str, cleaning: list[dict], results: dict) ->
 
 
 # Reference categorical palette, fixed order (dataviz skill, light mode).
-SERIES = {"baseline": "#2a78d6", "gbm": "#eb6834", "nn": "#1baf7a", "tabpfn": "#eda100", "gbm_notax": "#e87ba4"}
+SERIES = {"baseline": "#2a78d6", "gbm": "#eb6834", "nn": "#1baf7a", "tabpfn": "#eda100", "gbm_notax": "#e87ba4",
+          "gbm_updates": "#008300", "gbm_text": "#6250d6", "gbm_photos": "#e34948", "gbm_all": "#52514e"}
 INK, INK2, GRID, SURFACE = "#0b0b0b", "#52514e", "#e6e5e1", "#fcfcfb"
 
 
@@ -243,12 +264,12 @@ def charts(out: Path, results: dict) -> None:
                     ax.text(b.get_x() + b.get_width() / 2, v, fmt.format(v), ha="center", va="bottom", fontsize=8, color=INK2)
         ax.set_xticks(x, groups)
         _style(ax)
-        ax.legend(frameon=False, ncols=n, loc="upper left", bbox_to_anchor=(0, 1.12))
+        ax.legend(frameon=False, ncols=min(n, 4), loc="lower left", bbox_to_anchor=(0, 1.0), fontsize=8)
 
     # 1. Median abs % error, every model, both splits.
     names = list(results)
     models = list(next(iter(results.values()))["overall"])
-    fig, ax = plt.subplots(figsize=(7, 3.6))
+    fig, ax = plt.subplots(figsize=(max(7, 1.6 * len(models) + 2), 3.8))
     grouped(ax, [results[s]["label"] for s in names], {m: [results[s]["overall"][m]["mdape"] for s in names] for m in models})
     ax.set_ylabel("Median absolute % error (lower is better)")
     fig.tight_layout()
@@ -259,7 +280,7 @@ def charts(out: Path, results: dict) -> None:
     r = results.get("recent") or results[names[0]]
     t = r["breakdowns"]["price_band"]
     if not t.empty:
-        fig, ax = plt.subplots(figsize=(8, 3.6))
+        fig, ax = plt.subplots(figsize=(max(8, 1.8 * len(models) + 2), 3.8))
         grouped(ax, list(t["price_band"]), {m: list(t[m]) for m in models})
         ax.set_ylabel("Median absolute % error")
         fig.tight_layout()
@@ -293,8 +314,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", default="data/sample.csv", help="CSV path, or 'db' for DATABASE_URL")
     ap.add_argument("--out", default="results/sample")
-    ap.add_argument("--models", default="baseline,gbm,nn,gbm_notax",
-                    help="comma list of baseline,gbm,nn,gbm_notax,tabpfn")
+    ap.add_argument("--models", default="baseline,gbm,nn,gbm_notax,gbm_updates,gbm_text,gbm_photos,gbm_all",
+                    help="comma list of baseline,gbm,nn,tabpfn,gbm_notax,gbm_updates,gbm_text,gbm_photos,gbm_all")
+    ap.add_argument("--photos", default=None, help="directory of src.photos output (data/sample_photos for the sample)")
     ap.add_argument("--test-months", type=int, default=3)
     ap.add_argument("--shift-months", type=int, default=12)
     a = ap.parse_args()
@@ -305,7 +327,7 @@ def main():
 
     raw = data.load(a.data)
     sales, cleaning = F.clean(raw)
-    x = F.build(sales)
+    x = F.add_extras(F.build(sales), a.photos)
     x["price_band"] = pd.cut(x["close_price"], PRICE_BANDS, labels=BAND_LABELS, right=False).astype(str)
 
     results, summary = {}, {"source": a.data, "cleaning": cleaning, "splits": {}}

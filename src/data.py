@@ -13,7 +13,9 @@ Canonical columns (one row per sale):
     listing_key, mls_status, property_type, sale_date, close_date, close_price,
     sqft_range, beds_above, beds_below, baths, lot_width, lot_depth, lot_units,
     approx_age, basement, garage_type, parking_total, style, heat_type, cooling,
-    tax_annual, tax_year, condo_fee, lat, lng, city_region, address, postal_code
+    tax_annual, tax_year, condo_fee, lat, lng, city_region, address, postal_code, remarks,
+    foundation, heat_source, garage_spaces, kitchens, rooms_above, fireplace, family_room,
+    central_vac, pool, sewer, water, exterior
 
 ``sale_date`` is the day the sale went firm (PropTx PurchaseContractDate),
 falling back to the closing day when the firm date is missing. Closing can be
@@ -33,11 +35,14 @@ COLUMNS = [
     "listing_key", "mls_status", "property_type", "sale_date", "close_date", "close_price",
     "sqft_range", "beds_above", "beds_below", "baths", "lot_width", "lot_depth", "lot_units",
     "approx_age", "basement", "garage_type", "parking_total", "style", "heat_type", "cooling",
-    "tax_annual", "tax_year", "condo_fee", "lat", "lng", "city_region", "address", "postal_code",
+    "tax_annual", "tax_year", "condo_fee", "lat", "lng", "city_region", "address", "postal_code", "remarks",
+    "foundation", "heat_source", "garage_spaces", "kitchens", "rooms_above", "fireplace", "family_room",
+    "central_vac", "pool", "sewer", "water", "exterior",
 ]
 
 NUMERIC = ["close_price", "beds_above", "beds_below", "baths", "lot_width", "lot_depth",
-           "parking_total", "tax_annual", "tax_year", "condo_fee", "lat", "lng"]
+           "parking_total", "tax_annual", "tax_year", "condo_fee", "lat", "lng", "garage_spaces", "kitchens",
+           "rooms_above"]
 
 
 def _normalise(df: pd.DataFrame) -> pd.DataFrame:
@@ -67,6 +72,10 @@ def _joined(v) -> str | None:
     if isinstance(v, list):
         return ", ".join(str(x) for x in v if x not in (None, "")) or None
     return str(v)
+
+
+def _yn(v) -> str | None:
+    return None if v is None else ("Y" if v is True or str(v).lower() in ("true", "y", "yes") else "N")
 
 
 def _address(r: dict) -> str | None:
@@ -112,6 +121,19 @@ def from_record(row: dict) -> dict:
         "city_region": r.get("CityRegion"),
         "address": _address(r),
         "postal_code": r.get("PostalCode"),
+        "remarks": r.get("PublicRemarks"),
+        "foundation": _joined(r.get("FoundationDetails")),
+        "heat_source": r.get("HeatSource"),
+        "garage_spaces": r.get("CoveredSpaces"),
+        "kitchens": r.get("KitchensTotal"),
+        "rooms_above": r.get("RoomsAboveGrade"),
+        "fireplace": _yn(r.get("FireplaceYN")),
+        "family_room": _yn(r.get("DenFamilyroomYN")),
+        "central_vac": _yn(r.get("CentralVacuumYN")),
+        "pool": _joined(r.get("PoolFeatures")),
+        "sewer": _joined(r.get("Sewer")),
+        "water": r.get("Water"),
+        "exterior": _joined(r.get("ConstructionMaterials")),
     }
 
 

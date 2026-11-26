@@ -77,3 +77,45 @@ def test_db_record_mapping():
     r = data.from_record(row)
     assert r["property_type"] == "Semi-Detached" and r["basement"] == "Full, Finished"
     assert r["sale_date"] == "2026-01-02" and r["address"] == "3-12 Main St" and r["style"] == "2-Storey"
+
+
+def test_update_features_from_descriptions():
+    from src import text
+
+    r = pd.Series(["Stunning! New roof 2021, furnace & A/C (2019). HWT rental. Priced at $649,900.",
+                   "Handyman special, sold as-is. Original kitchen.",
+                   "Fully renovated kitchen and bathrooms, newer windows. Owned hot water tank.",
+                   None])
+    f = text.update_features(r, pd.Series([2026] * 4))
+    assert f.loc[0, "age_roof"] == 5 and f.loc[0, "age_furnace"] == 7 and f.loc[0, "age_ac"] == 7
+    assert f.loc[0, "txt_hwt_rental"] == 1 and np.isnan(f.loc[0, "age_hwt"])  # no year borrowed across sentences
+    assert f.loc[1, "txt_tlc"] == 1 and f.loc[1, "upd_kitchen"] == 0
+    assert f.loc[2, "upd_kitchen"] == 1 and f.loc[2, "upd_bath"] == 1 and f.loc[2, "upd_windows"] == 1
+    assert f.loc[2, "txt_hwt_owned"] == 1
+    assert f.loc[3].isna().all()
+
+
+def test_prices_never_reach_text_features():
+    from src import text
+
+    assert "649" not in text._strip_prices("listed at $649,900 or 650k")
+
+
+def test_new_property_fields():
+    df = pd.DataFrame({"foundation": ["Poured Concrete", "Concrete Block", "Stone", None],
+                       "pool": ["Inground, Salt", "None", None, "Above Ground"],
+                       "sewer": ["Septic", "Sewer", None, "Sewer"]})
+    assert [F._foundation(v) for v in df["foundation"]] == ["concrete", "block", "stone", None]
+    assert F._has(df["pool"], "Inground").tolist()[:2] == [1.0, 0.0]
+    assert F._has(df["sewer"], "Septic").tolist()[0] == 1.0
+
+
+def test_extras_merge_photos(sample, tmp_path):
+    import make_sample
+
+    clean, _ = F.clean(sample)
+    raw = make_sample.generate(300, seed=3)
+    make_sample.synthetic_photos(raw, tmp_path)
+    x = F.add_extras(F.build(clean.head(300)), str(tmp_path))
+    assert len(x) == 300
+    assert {"zs_kitchen_updated_mean", "img_pc_0", "upd_roof", "txt_svd_0"} <= set(x.columns)

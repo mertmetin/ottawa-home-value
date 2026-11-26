@@ -9,137 +9,142 @@
 | no price or date | 0 | ClosePrice or sale date missing |
 | property type | 59 | land, farm, mobile home, other |
 | duplicate key | 0 | same ListingKey twice |
-| duplicate sale | 58 | same address sold again within 60 days |
-| price range | 12 | price under $75,000 or over $8,000,000 (typos, parking spots, portfolios) |
-| price outlier | 13 | $/sqft more than 4.0 robust SDs from its property type |
-| output | 0 | 5858 rows |
+| duplicate sale | 57 | same address sold again within 60 days |
+| price range | 9 | price under $75,000 or over $8,000,000 (typos, parking spots, portfolios) |
+| price outlier | 15 | $/sqft more than 4.0 robust SDs from its property type |
+| output | 0 | 5860 rows |
 
 ## Split: recent
 
 train 2024-12-02 to 2026-09-10, test after 2026-09-10 (last 3 months)
-Train 5,461 sales, test 397.
+Train 5,468 sales, test 392.
 
 | Model | MAE | Median abs % error | Within 5% | Within 10% | Median bias |
 |---|---|---|---|---|---|
-| Comps baseline | $88,382 | 10.5% | 24.4% | 47.1% | +4.9% |
-| LightGBM | $36,554 | 4.4% | 54.4% | 86.4% | +1.7% |
-| LightGBM, no taxes | $59,429 | 7.2% | 38.8% | 63.2% | +2.5% |
-| Neural net (MLP) | $37,609 | 4.4% | 53.7% | 85.1% | +0.8% |
+| Comps baseline | $98,576 | 12.2% | 20.2% | 39.8% | +2.1% |
+| LightGBM | $41,536 | 4.9% | 51.0% | 82.9% | -0.0% |
+| LightGBM, no taxes | $73,911 | 9.0% | 29.1% | 54.8% | +1.2% |
+| + updates (roof, furnace...) | $39,302 | 5.0% | 50.3% | 84.4% | +0.4% |
+| + description | $40,310 | 4.9% | 51.5% | 84.4% | +0.7% |
+| + photos | $37,871 | 4.9% | 51.8% | 85.7% | +1.2% |
+| + description + photos | $38,060 | 4.7% | 52.6% | 85.5% | +1.0% |
+| Neural net (MLP) | $45,391 | 5.2% | 47.7% | 79.6% | +0.2% |
 
 ### LightGBM range (target: contains the sale price 80% of the time)
 
 | | Contains sale price | Median width |
 |---|---|---|
-| Raw 10-90% quantile models | 71.0% | 14.2% |
-| Calibrated (conformal) | 82.4% | 18.0% |
-| ... condo (85) | 82.4% | 21.7% |
-| ... freehold (312) | 82.4% | 17.5% |
-| ... $400-600K (104) | 82.7% | 17.8% |
-| ... $600-800K (103) | 82.5% | 16.5% |
-| ... $800K-1.2M (108) | 86.1% | 17.5% |
-| ... < $400K (69) | 73.9% | 22.3% |
+| Raw 10-90% quantile models | 62.8% | 12.6% |
+| Calibrated (conformal) | 75.8% | 16.5% |
+| ... condo (92) | 82.6% | 16.2% |
+| ... freehold (300) | 73.7% | 16.6% |
+| ... $400-600K (88) | 76.1% | 17.1% |
+| ... $600-800K (80) | 75.0% | 16.9% |
+| ... $800K-1.2M (122) | 75.4% | 16.0% |
+| ... < $400K (81) | 75.3% | 16.5% |
+| ... > $1.2M (21) | 81.0% | 17.0% |
 
 ### By property type (median abs % error)
 
-| property_type | n | Comps baseline | LightGBM | LightGBM, no taxes | Neural net (MLP) |
-|---|---|---|---|---|---|
-| Detached | 176 | 10.1% | 4.9% | 7.1% | 4.9% |
-| Att/Row/Townhouse | 80 | 9.6% | 4.3% | 7.4% | 3.9% |
-| Condo Apartment | 49 | 12.0% | 4.9% | 6.4% | 4.8% |
-| Semi-Detached | 42 | 12.3% | 2.9% | 7.4% | 3.7% |
-| Condo Townhouse | 34 | 11.5% | 4.0% | 8.3% | 4.5% |
+| property_type | n | Comps baseline | LightGBM | LightGBM, no taxes | + updates (roof, furnace...) | + description | + photos | + description + photos | Neural net (MLP) |
+|---|---|---|---|---|---|---|---|---|---|
+| Detached | 183 | 11.6% | 4.8% | 9.0% | 4.9% | 4.9% | 5.2% | 4.7% | 5.3% |
+| Condo Apartment | 67 | 12.5% | 4.1% | 8.2% | 4.9% | 4.5% | 4.8% | 4.6% | 4.7% |
+| Att/Row/Townhouse | 64 | 12.3% | 5.1% | 9.0% | 4.5% | 5.3% | 4.9% | 4.8% | 5.1% |
+| Semi-Detached | 31 | 13.4% | 6.2% | 9.1% | 5.6% | 4.8% | 4.4% | 5.6% | 6.0% |
+| Condo Townhouse | 21 | 11.5% | 3.9% | 9.2% | 5.4% | 4.1% | 3.8% | 3.7% | 5.2% |
 
 ### By price band (median abs % error)
 
-| price_band | n | Comps baseline | LightGBM | LightGBM, no taxes | Neural net (MLP) |
-|---|---|---|---|---|---|
-| < $400K | 69 | 12.0% | 4.2% | 9.2% | 5.4% |
-| $400-600K | 104 | 11.3% | 4.5% | 7.8% | 4.2% |
-| $600-800K | 103 | 10.4% | 4.4% | 7.6% | 4.0% |
-| $800K-1.2M | 108 | 9.9% | 4.0% | 6.1% | 4.6% |
-| > $1.2M | 13 | 10.1% | 5.4% | 5.7% | 4.1% |
+| price_band | n | Comps baseline | LightGBM | LightGBM, no taxes | + updates (roof, furnace...) | + description | + photos | + description + photos | Neural net (MLP) |
+|---|---|---|---|---|---|---|---|---|---|
+| < $400K | 81 | 13.4% | 5.4% | 9.1% | 5.3% | 5.2% | 4.9% | 5.0% | 4.9% |
+| $400-600K | 88 | 12.8% | 5.0% | 8.8% | 5.0% | 4.9% | 4.6% | 4.4% | 6.2% |
+| $600-800K | 80 | 11.8% | 4.3% | 8.8% | 4.6% | 4.8% | 4.8% | 4.8% | 5.1% |
+| $800K-1.2M | 122 | 11.3% | 5.2% | 8.4% | 4.9% | 4.9% | 5.3% | 4.6% | 4.9% |
+| > $1.2M | 21 | 10.2% | 4.1% | 10.3% | 4.4% | 4.7% | 3.7% | 3.8% | 5.4% |
 
 ### By neighbourhood (15 largest in the test set) (median abs % error)
 
-| city_region | n | Comps baseline | LightGBM | LightGBM, no taxes | Neural net (MLP) |
-|---|---|---|---|---|---|
-| 7704 - Barrhaven - Heritage Park | 26 | 12.7% | 5.2% | 8.2% | 3.8% |
-| 4001 - Lower Town/Byward Market | 24 | 12.0% | 3.9% | 5.9% | 4.0% |
-| 4801 - Old Ottawa South | 23 | 15.6% | 5.7% | 7.8% | 5.9% |
-| 9008 - Kanata - Morgan's Grant/South March | 23 | 7.5% | 3.9% | 4.0% | 4.9% |
-| 2201 - Orleans - Convent Glen | 22 | 16.5% | 4.6% | 7.4% | 4.5% |
-| 9010 - Kanata - Emerald Meadows/Trailwest | 21 | 9.7% | 4.9% | 6.3% | 5.0% |
-| 3701 - Alta Vista | 20 | 13.1% | 4.3% | 7.1% | 5.4% |
-| 4401 - Glebe | 20 | 8.5% | 4.6% | 4.3% | 3.5% |
-| 4601 - Hintonburg/Mechanicsville | 20 | 5.8% | 5.1% | 4.7% | 4.1% |
-| 5003 - Westboro/Hampton Park | 20 | 7.2% | 4.2% | 12.6% | 4.4% |
+| city_region | n | Comps baseline | LightGBM | LightGBM, no taxes | + updates (roof, furnace...) | + description | + photos | + description + photos | Neural net (MLP) |
+|---|---|---|---|---|---|---|---|---|---|
+| 7704 - Barrhaven - Heritage Park | 25 | 12.8% | 6.5% | 12.2% | 5.9% | 6.4% | 4.9% | 5.5% | 5.0% |
+| 4001 - Lower Town/Byward Market | 24 | 10.6% | 4.4% | 9.7% | 3.5% | 4.4% | 2.8% | 3.1% | 4.4% |
+| 4801 - Old Ottawa South | 23 | 12.4% | 5.7% | 13.1% | 4.7% | 4.9% | 5.1% | 5.8% | 4.9% |
+| 9008 - Kanata - Morgan's Grant/South March | 23 | 10.9% | 6.0% | 10.5% | 5.3% | 5.3% | 5.3% | 4.8% | 6.0% |
+| 9010 - Kanata - Emerald Meadows/Trailwest | 21 | 10.6% | 4.0% | 5.7% | 4.6% | 5.4% | 4.9% | 4.7% | 5.0% |
+| 4401 - Glebe | 20 | 11.2% | 3.9% | 9.2% | 4.5% | 4.8% | 4.1% | 4.7% | 6.7% |
+| 4601 - Hintonburg/Mechanicsville | 20 | 19.2% | 4.6% | 8.2% | 4.8% | 4.5% | 5.4% | 5.2% | 3.2% |
 
 ## Split: shift
 
 train first 12 months (2024-12-02 to 2025-12-02), test everything after
-Train 3,007 sales, test 2,851.
+Train 3,010 sales, test 2,850.
 
 | Model | MAE | Median abs % error | Within 5% | Within 10% | Median bias |
 |---|---|---|---|---|---|
-| Comps baseline | $91,279 | 10.8% | 23.8% | 46.9% | +0.5% |
-| LightGBM | $40,792 | 4.9% | 50.8% | 83.2% | +2.2% |
-| LightGBM, no taxes | $64,911 | 7.8% | 33.9% | 61.4% | +0.2% |
-| Neural net (MLP) | $51,360 | 5.8% | 43.9% | 76.1% | -2.3% |
+| Comps baseline | $97,166 | 11.0% | 23.9% | 45.8% | +0.4% |
+| LightGBM | $43,327 | 4.8% | 51.2% | 81.8% | +2.1% |
+| LightGBM, no taxes | $70,661 | 8.1% | 32.5% | 59.5% | -0.0% |
+| + updates (roof, furnace...) | $43,101 | 4.8% | 51.8% | 82.3% | +2.2% |
+| + description | $42,436 | 4.7% | 52.1% | 82.3% | +1.8% |
+| + photos | $42,411 | 4.8% | 51.5% | 83.0% | +2.2% |
+| + description + photos | $42,335 | 4.7% | 52.3% | 82.8% | +2.2% |
+| Neural net (MLP) | $56,919 | 6.3% | 40.9% | 71.4% | -1.3% |
 
 ### LightGBM range (target: contains the sale price 80% of the time)
 
 | | Contains sale price | Median width |
 |---|---|---|
-| Raw 10-90% quantile models | 67.9% | 13.7% |
-| Calibrated (conformal) | 78.4% | 17.3% |
-| ... condo (732) | 75.4% | 18.7% |
-| ... freehold (2,119) | 79.5% | 16.9% |
-| ... $400-600K (705) | 79.9% | 17.3% |
-| ... $600-800K (661) | 83.4% | 16.7% |
-| ... $800K-1.2M (755) | 81.1% | 16.2% |
-| ... < $400K (526) | 65.0% | 18.8% |
-| ... > $1.2M (204) | 82.4% | 25.2% |
+| Raw 10-90% quantile models | 69.4% | 15.1% |
+| Calibrated (conformal) | 77.8% | 18.1% |
+| ... condo (670) | 76.4% | 21.0% |
+| ... freehold (2,180) | 78.2% | 17.6% |
+| ... $400-600K (659) | 71.9% | 16.1% |
+| ... $600-800K (622) | 82.8% | 16.8% |
+| ... $800K-1.2M (816) | 84.1% | 17.7% |
+| ... < $400K (505) | 68.9% | 24.2% |
+| ... > $1.2M (248) | 77.8% | 33.2% |
 
 ### By property type (median abs % error)
 
-| property_type | n | Comps baseline | LightGBM | LightGBM, no taxes | Neural net (MLP) |
-|---|---|---|---|---|---|
-| Detached | 1,253 | 10.3% | 5.0% | 7.7% | 6.2% |
-| Att/Row/Townhouse | 504 | 10.7% | 4.9% | 8.1% | 5.5% |
-| Condo Apartment | 473 | 10.9% | 4.9% | 7.1% | 4.8% |
-| Condo Townhouse | 229 | 11.0% | 4.5% | 8.0% | 5.3% |
-| Semi-Detached | 220 | 12.1% | 4.5% | 7.8% | 5.7% |
-| Duplex | 77 | 10.8% | 5.0% | 7.9% | 7.3% |
-| Link | 35 | 14.5% | 5.5% | 9.6% | 5.2% |
-| Common Element Condo | 30 | 11.4% | 5.7% | 7.2% | 5.2% |
-| Triplex | 30 | 13.1% | 3.6% | 9.1% | 7.2% |
+| property_type | n | Comps baseline | LightGBM | LightGBM, no taxes | + updates (roof, furnace...) | + description | + photos | + description + photos | Neural net (MLP) |
+|---|---|---|---|---|---|---|---|---|---|
+| Detached | 1,268 | 10.4% | 4.9% | 8.3% | 4.8% | 4.7% | 4.7% | 4.7% | 6.6% |
+| Att/Row/Townhouse | 513 | 11.1% | 5.0% | 8.5% | 4.9% | 5.3% | 5.4% | 5.2% | 5.9% |
+| Condo Apartment | 435 | 11.1% | 4.7% | 7.2% | 4.8% | 4.5% | 4.4% | 4.6% | 5.6% |
+| Semi-Detached | 227 | 10.6% | 4.9% | 9.1% | 4.7% | 4.7% | 5.2% | 4.2% | 5.7% |
+| Condo Townhouse | 216 | 11.4% | 4.7% | 6.3% | 4.5% | 4.5% | 4.2% | 4.5% | 6.8% |
+| Duplex | 89 | 14.3% | 5.3% | 10.0% | 5.2% | 4.4% | 4.9% | 5.5% | 7.5% |
+| Triplex | 45 | 11.2% | 4.4% | 9.6% | 4.6% | 4.4% | 5.1% | 4.4% | 9.9% |
+| Link | 38 | 18.2% | 6.3% | 7.3% | 6.2% | 7.3% | 7.6% | 5.5% | 3.9% |
 
 ### By price band (median abs % error)
 
-| price_band | n | Comps baseline | LightGBM | LightGBM, no taxes | Neural net (MLP) |
-|---|---|---|---|---|---|
-| < $400K | 526 | 11.2% | 5.4% | 8.2% | 5.5% |
-| $400-600K | 705 | 10.8% | 4.7% | 7.3% | 4.8% |
-| $600-800K | 661 | 10.9% | 4.9% | 7.9% | 5.2% |
-| $800K-1.2M | 755 | 10.5% | 4.7% | 7.4% | 7.2% |
-| > $1.2M | 204 | 10.2% | 5.2% | 8.4% | 7.9% |
+| price_band | n | Comps baseline | LightGBM | LightGBM, no taxes | + updates (roof, furnace...) | + description | + photos | + description + photos | Neural net (MLP) |
+|---|---|---|---|---|---|---|---|---|---|
+| < $400K | 505 | 11.9% | 5.1% | 7.3% | 5.1% | 4.9% | 4.8% | 4.8% | 6.9% |
+| $400-600K | 659 | 11.1% | 5.1% | 8.6% | 5.2% | 5.3% | 5.5% | 5.2% | 5.6% |
+| $600-800K | 622 | 10.6% | 4.7% | 8.7% | 4.6% | 4.4% | 4.5% | 4.4% | 4.9% |
+| $800K-1.2M | 816 | 10.4% | 4.5% | 7.8% | 4.4% | 4.5% | 4.6% | 4.6% | 6.8% |
+| > $1.2M | 248 | 11.9% | 5.1% | 8.5% | 5.1% | 4.9% | 5.3% | 5.1% | 10.1% |
 
 ### By neighbourhood (15 largest in the test set) (median abs % error)
 
-| city_region | n | Comps baseline | LightGBM | LightGBM, no taxes | Neural net (MLP) |
-|---|---|---|---|---|---|
-| 9010 - Kanata - Emerald Meadows/Trailwest | 165 | 9.5% | 5.5% | 6.6% | 5.8% |
-| 2201 - Orleans - Convent Glen | 151 | 11.0% | 5.4% | 8.1% | 6.1% |
-| 4401 - Glebe | 145 | 12.2% | 5.3% | 6.5% | 6.0% |
-| 3701 - Alta Vista | 144 | 11.1% | 4.4% | 7.2% | 5.9% |
-| 4801 - Old Ottawa South | 133 | 10.9% | 5.0% | 7.5% | 6.8% |
-| 1105 - Fallingbrook/Pineview | 133 | 9.0% | 4.5% | 7.9% | 6.8% |
-| 9008 - Kanata - Morgan's Grant/South March | 132 | 10.7% | 4.4% | 7.6% | 6.4% |
-| 4103 - Ottawa Centre | 131 | 11.0% | 5.2% | 9.1% | 6.2% |
-| 7704 - Barrhaven - Heritage Park | 129 | 10.3% | 5.0% | 8.9% | 5.2% |
-| 1118 - Avalon/Notting Gate/Fallingbrook | 128 | 10.3% | 4.2% | 7.9% | 5.5% |
-| 4601 - Hintonburg/Mechanicsville | 128 | 9.5% | 5.4% | 7.9% | 5.2% |
-| 4001 - Lower Town/Byward Market | 126 | 11.4% | 5.0% | 8.1% | 4.6% |
-| 5003 - Westboro/Hampton Park | 125 | 9.4% | 4.6% | 7.5% | 7.5% |
-| 7301 - Nepean - Centrepointe | 125 | 9.3% | 4.9% | 8.2% | 5.1% |
-| 7711 - Barrhaven - Half Moon Bay | 125 | 10.6% | 4.9% | 7.3% | 4.8% |
+| city_region | n | Comps baseline | LightGBM | LightGBM, no taxes | + updates (roof, furnace...) | + description | + photos | + description + photos | Neural net (MLP) |
+|---|---|---|---|---|---|---|---|---|---|
+| 9010 - Kanata - Emerald Meadows/Trailwest | 162 | 9.5% | 5.3% | 8.0% | 5.2% | 5.1% | 5.2% | 4.7% | 5.9% |
+| 4401 - Glebe | 149 | 11.8% | 4.6% | 7.1% | 4.7% | 4.8% | 4.8% | 4.6% | 6.3% |
+| 3701 - Alta Vista | 146 | 12.5% | 4.5% | 7.0% | 4.7% | 4.3% | 4.6% | 4.5% | 7.1% |
+| 2201 - Orleans - Convent Glen | 145 | 11.7% | 4.3% | 7.9% | 4.1% | 4.4% | 4.2% | 4.3% | 5.4% |
+| 1105 - Fallingbrook/Pineview | 140 | 11.7% | 4.6% | 8.6% | 4.2% | 4.3% | 4.2% | 3.8% | 7.3% |
+| 4801 - Old Ottawa South | 135 | 12.3% | 5.0% | 9.0% | 4.8% | 5.3% | 5.0% | 4.6% | 8.9% |
+| 9008 - Kanata - Morgan's Grant/South March | 134 | 10.7% | 5.4% | 9.5% | 4.8% | 4.6% | 4.8% | 4.9% | 6.6% |
+| 1118 - Avalon/Notting Gate/Fallingbrook | 130 | 8.9% | 5.0% | 8.4% | 5.1% | 5.0% | 4.6% | 4.8% | 6.7% |
+| 4103 - Ottawa Centre | 129 | 10.8% | 4.7% | 7.1% | 5.2% | 5.1% | 4.9% | 5.2% | 5.8% |
+| 7711 - Barrhaven - Half Moon Bay | 127 | 12.7% | 5.3% | 9.6% | 4.6% | 4.4% | 5.1% | 5.0% | 6.6% |
+| 4601 - Hintonburg/Mechanicsville | 126 | 11.9% | 5.5% | 7.6% | 5.3% | 4.9% | 5.7% | 5.3% | 5.6% |
+| 5003 - Westboro/Hampton Park | 125 | 13.0% | 5.4% | 9.1% | 5.2% | 4.7% | 5.5% | 5.3% | 6.8% |
+| 8211 - Stittsville (North) | 125 | 10.0% | 4.4% | 8.7% | 4.0% | 4.0% | 3.8% | 4.5% | 5.1% |
+| 2605 - Blossom Park/Kemp Park/Findlay Creek | 124 | 11.5% | 5.4% | 8.2% | 5.2% | 4.7% | 4.8% | 4.4% | 6.5% |
+| 4001 - Lower Town/Byward Market | 124 | 9.6% | 4.2% | 7.4% | 3.7% | 3.8% | 3.7% | 4.1% | 6.3% |

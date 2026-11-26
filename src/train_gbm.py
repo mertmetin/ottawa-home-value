@@ -61,7 +61,7 @@ class GBM:
         """Model input with categoricals pinned to the training categories."""
         out = x[self.features].copy()
         for c in self.features:
-            if c in F.NUMERIC:
+            if c not in F.CATEGORICAL:
                 out[c] = pd.to_numeric(out[c], errors="coerce").astype(float)
         for c in self.categorical:
             v = out[c].astype("object")

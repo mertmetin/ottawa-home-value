@@ -34,6 +34,8 @@ UPDATE_ITEMS = ["roof", "windows", "furnace", "ac", "kitchen", "bath", "flooring
 BASEMENT = {"Finished": "Full, Finished", "Partially Finished": "Full, Partially Finished",
             "Unfinished": "Full, Unfinished", "None": "None"}
 FOUNDATION = {"Poured Concrete": "Poured Concrete", "Concrete Block": "Concrete Block", "Stone": "Stone"}
+CONDITION_TLC = {"Needs work"}
+CONDITION_TURNKEY = {"Excellent", "Newly renovated"}
 CHECKS = ["hv_central_air", "hv_fireplace", "hv_pool", "hv_suite", "hv_septic", "hv_well"]
 
 
@@ -123,6 +125,12 @@ def update_columns(a: dict, home_age: float) -> dict:
             out[f"upd_{item}"] = float(years <= 10)
     for k in text.CONDITION:
         out[f"txt_{k}"] = 0.0
+    # "How would you describe it inside?" -> the description cues the model learned
+    cond = _ok(a, "condition")
+    if cond in CONDITION_TLC:
+        out["txt_tlc"] = 1.0
+    elif cond in CONDITION_TURNKEY:
+        out["txt_turnkey"] = 1.0
     hwt = _ok(a, "hv_hwt")
     if hwt == "owned":
         out["txt_hwt_owned"] = 1.0
@@ -184,6 +192,8 @@ def _unanswered(x: pd.DataFrame, key: str) -> pd.DataFrame | None:
     if key.startswith("hv_upd_"):
         item = key[len("hv_upd_"):]
         v[f"upd_{item}"], v[f"age_{item}"] = 0.0, np.nan
+    elif key == "condition":
+        v["txt_tlc"], v["txt_turnkey"] = 0.0, 0.0
     elif key == "hv_hwt":
         v["txt_hwt_owned"], v["txt_hwt_rental"] = 0.0, 0.0
     elif key == "hv_basement":
@@ -211,7 +221,7 @@ def _unanswered(x: pd.DataFrame, key: str) -> pd.DataFrame | None:
 
 
 EXPLAIN_KEYS = [f"hv_upd_{i}" for i in UPDATE_ITEMS] + [
-    "hv_hwt", "hv_basement", "hv_garage", "hv_foundation", "hv_age", "hv_tax"] + CHECKS[:4]
+    "condition", "hv_hwt", "hv_basement", "hv_garage", "hv_foundation", "hv_age", "hv_tax"] + CHECKS[:4]
 
 
 def answered(a: dict) -> list[str]:

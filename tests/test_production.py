@@ -104,6 +104,9 @@ def test_answers_map_to_features():
     assert upd["upd_windows"] == 0 and upd["age_windows"] == 22.0
     assert upd["txt_hwt_rental"] == 1 and upd["upd_furnace"] == 0 and np.isnan(upd["age_furnace"])
     assert homeowner.answered(a) == ["hv_upd_roof", "hv_upd_windows", "hv_hwt", "hv_garage", "hv_central_air"]
+    assert homeowner.update_columns({"condition": "Needs work"}, 10.0)["txt_tlc"] == 1
+    assert homeowner.update_columns({"condition": "Newly renovated"}, 10.0)["txt_turnkey"] == 1
+    assert homeowner.update_columns({"condition": "Good"}, 10.0)["txt_turnkey"] == 0
 
 
 def test_api_estimates_and_reloads(first, world):

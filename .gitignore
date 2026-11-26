@@ -1,0 +1,22 @@
+# Licensed PropTx data and anything trained on it never leave the server.
+data/raw/
+data/*.parquet
+*.csv
+!data/sample.csv
+!data/otrain_stations.csv
+models/
+*.pt
+*.lgb
+*.joblib
+
+# Results from real data stay local; results/ from sample.csv runs are fine to commit.
+results/real/
+
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store
+*.egg-info/

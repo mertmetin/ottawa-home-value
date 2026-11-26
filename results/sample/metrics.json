@@ -1,0 +1,529 @@
+{
+  "source": "data/sample.csv",
+  "cleaning": [
+    {
+      "step": "input",
+      "removed": 0,
+      "why": "6060 rows"
+    },
+    {
+      "step": "not sold",
+      "removed": 60,
+      "why": "closed but not a completed sale (e.g. Deal Fell Through)"
+    },
+    {
+      "step": "no price or date",
+      "removed": 0,
+      "why": "ClosePrice or sale date missing"
+    },
+    {
+      "step": "property type",
+      "removed": 59,
+      "why": "land, farm, mobile home, other"
+    },
+    {
+      "step": "duplicate key",
+      "removed": 0,
+      "why": "same ListingKey twice"
+    },
+    {
+      "step": "duplicate sale",
+      "removed": 58,
+      "why": "same address sold again within 60 days"
+    },
+    {
+      "step": "price range",
+      "removed": 12,
+      "why": "price under $75,000 or over $8,000,000 (typos, parking spots, portfolios)"
+    },
+    {
+      "step": "price outlier",
+      "removed": 13,
+      "why": "$/sqft more than 4.0 robust SDs from its property type"
+    },
+    {
+      "step": "output",
+      "removed": 0,
+      "why": "5858 rows"
+    }
+  ],
+  "splits": {
+    "recent": {
+      "desc": "train 2024-12-02 to 2026-09-10, test after 2026-09-10 (last 3 months)",
+      "n_train": 5461,
+      "n_test": 397,
+      "overall": {
+        "baseline": {
+          "n": 397,
+          "mae": 88382.38316286096,
+          "mdape": 10.455085081123851,
+          "within_5": 24.43324937027708,
+          "within_10": 47.103274559193956,
+          "bias": 4.947460595446605
+        },
+        "gbm": {
+          "n": 397,
+          "mae": 36553.854654736206,
+          "mdape": 4.406908780329412,
+          "within_5": 54.40806045340051,
+          "within_10": 86.39798488664987,
+          "bias": 1.6585671627014655
+        },
+        "nn": {
+          "n": 397,
+          "mae": 37608.8211193325,
+          "mdape": 4.427982573726542,
+          "within_5": 53.65239294710328,
+          "within_10": 85.13853904282117,
+          "bias": 0.8203917050691244
+        }
+      },
+      "extra": {
+        "gbm_range": {
+          "coverage_10_90": 71.03274559193954,
+          "median_width_pct": 14.214226571251695
+        },
+        "gbm_importance": {
+          "tax_annual": 9838.4,
+          "property_type": 1315.2,
+          "comp_price_med": 1020.4,
+          "sqft_mid": 1001.7,
+          "sqft_range": 360.0,
+          "area_ppsf_90d": 182.8,
+          "comp_ppsf_med": 104.3,
+          "baths": 40.0,
+          "dist_downtown_km": 30.3,
+          "city_ppsf_90d": 27.4,
+          "city_region": 26.1,
+          "beds_above": 25.9,
+          "t_months": 19.2,
+          "dist_station_km": 18.5,
+          "comp_dist_km": 18.2
+        },
+        "gbm_trees": 276
+      },
+      "train_seconds": {
+        "gbm": 4.384893894195557,
+        "nn": 7.331686019897461
+      },
+      "breakdowns": {
+        "property_type": [
+          {
+            "property_type": "Detached",
+            "n": 176,
+            "baseline": 10.123319623676727,
+            "gbm": 4.882240812457388,
+            "nn": 4.856838753681974
+          },
+          {
+            "property_type": "Att/Row/Townhouse",
+            "n": 80,
+            "baseline": 9.6295441326571,
+            "gbm": 4.308537528770039,
+            "nn": 3.8694788711146697
+          },
+          {
+            "property_type": "Condo Apartment",
+            "n": 49,
+            "baseline": 12.0,
+            "gbm": 4.881559266436299,
+            "nn": 4.762157780979827
+          },
+          {
+            "property_type": "Semi-Detached",
+            "n": 42,
+            "baseline": 12.280284421460891,
+            "gbm": 2.927801121093666,
+            "nn": 3.738437969425734
+          },
+          {
+            "property_type": "Condo Townhouse",
+            "n": 34,
+            "baseline": 11.463808871099335,
+            "gbm": 4.041422549738287,
+            "nn": 4.479820397683606
+          }
+        ],
+        "price_band": [
+          {
+            "price_band": "< $400K",
+            "n": 69,
+            "baseline": 12.0,
+            "gbm": 4.23768511031593,
+            "nn": 5.358716259640103
+          },
+          {
+            "price_band": "$400-600K",
+            "n": 104,
+            "baseline": 11.26624143633357,
+            "gbm": 4.515946301309527,
+            "nn": 4.186190491722976
+          },
+          {
+            "price_band": "$600-800K",
+            "n": 103,
+            "baseline": 10.433634162447735,
+            "gbm": 4.392397351929166,
+            "nn": 3.98382800608828
+          },
+          {
+            "price_band": "$800K-1.2M",
+            "n": 108,
+            "baseline": 9.858854704969996,
+            "gbm": 3.9673915462302847,
+            "nn": 4.594022738800076
+          },
+          {
+            "price_band": "> $1.2M",
+            "n": 13,
+            "baseline": 10.064331317353073,
+            "gbm": 5.365298697447476,
+            "nn": 4.144295241528479
+          }
+        ],
+        "city_region": [
+          {
+            "city_region": "7704 - Barrhaven - Heritage Park",
+            "n": 26,
+            "baseline": 12.660534607986456,
+            "gbm": 5.219266032579656,
+            "nn": 3.8421176622321744
+          },
+          {
+            "city_region": "4001 - Lower Town/Byward Market",
+            "n": 24,
+            "baseline": 12.000792685575291,
+            "gbm": 3.853281050575114,
+            "nn": 4.049662889981125
+          },
+          {
+            "city_region": "4801 - Old Ottawa South",
+            "n": 23,
+            "baseline": 15.606060606060607,
+            "gbm": 5.715271561617779,
+            "nn": 5.90697
+          },
+          {
+            "city_region": "9008 - Kanata - Morgan's Grant/South March",
+            "n": 23,
+            "baseline": 7.5285714285714205,
+            "gbm": 3.933320452980164,
+            "nn": 4.9129302536231885
+          },
+          {
+            "city_region": "2201 - Orleans - Convent Glen",
+            "n": 22,
+            "baseline": 16.49845433734359,
+            "gbm": 4.63406105477939,
+            "nn": 4.454283750284081
+          },
+          {
+            "city_region": "9010 - Kanata - Emerald Meadows/Trailwest",
+            "n": 21,
+            "baseline": 9.71248876909254,
+            "gbm": 4.890723681140765,
+            "nn": 4.952392375518673
+          },
+          {
+            "city_region": "3701 - Alta Vista",
+            "n": 20,
+            "baseline": 13.0576455877099,
+            "gbm": 4.315800878380214,
+            "nn": 5.434188433646374
+          },
+          {
+            "city_region": "4401 - Glebe",
+            "n": 20,
+            "baseline": 8.508425877541923,
+            "gbm": 4.620236091588066,
+            "nn": 3.458591580611764
+          },
+          {
+            "city_region": "4601 - Hintonburg/Mechanicsville",
+            "n": 20,
+            "baseline": 5.807199718287218,
+            "gbm": 5.058697961044038,
+            "nn": 4.125923193344665
+          },
+          {
+            "city_region": "5003 - Westboro/Hampton Park",
+            "n": 20,
+            "baseline": 7.1572588150332015,
+            "gbm": 4.169371906015949,
+            "nn": 4.379653766836814
+          }
+        ]
+      }
+    },
+    "shift": {
+      "desc": "train first 12 months (2024-12-02 to 2025-12-02), test everything after",
+      "n_train": 3007,
+      "n_test": 2851,
+      "overall": {
+        "baseline": {
+          "n": 2845,
+          "mae": 91278.74532055268,
+          "mdape": 10.756747635431772,
+          "within_5": 23.760984182776802,
+          "within_10": 46.92442882249561,
+          "bias": 0.45187282229966425
+        },
+        "gbm": {
+          "n": 2851,
+          "mae": 40791.60451783901,
+          "mdape": 4.921817263344538,
+          "within_5": 50.78919677306209,
+          "within_10": 83.23395299894773,
+          "bias": 2.2256846974526354
+        },
+        "nn": {
+          "n": 2851,
+          "mae": 51360.12107045773,
+          "mdape": 5.806298600311042,
+          "within_5": 43.91441599438794,
+          "within_10": 76.07856892318485,
+          "bias": -2.2674221789883267
+        }
+      },
+      "extra": {
+        "gbm_range": {
+          "coverage_10_90": 67.90599789547527,
+          "median_width_pct": 13.658042118810549
+        },
+        "gbm_importance": {
+          "tax_annual": 5451.3,
+          "property_type": 699.6,
+          "comp_price_med": 683.0,
+          "sqft_mid": 460.9,
+          "sqft_range": 173.6,
+          "area_ppsf_90d": 105.2,
+          "comp_ppsf_med": 53.9,
+          "baths": 23.4,
+          "city_ppsf_90d": 17.7,
+          "dist_downtown_km": 17.7,
+          "beds_above": 15.7,
+          "comp_dist_km": 14.4,
+          "lat": 11.6,
+          "lot_area": 10.6,
+          "dist_station_km": 10.4
+        },
+        "gbm_trees": 306
+      },
+      "train_seconds": {
+        "gbm": 4.169740200042725,
+        "nn": 2.406557083129883
+      },
+      "breakdowns": {
+        "property_type": [
+          {
+            "property_type": "Detached",
+            "n": 1253,
+            "baseline": 10.284888062665837,
+            "gbm": 5.021313260201954,
+            "nn": 6.197854609929078
+          },
+          {
+            "property_type": "Att/Row/Townhouse",
+            "n": 504,
+            "baseline": 10.708012134127928,
+            "gbm": 4.8568382427099746,
+            "nn": 5.538905791260354
+          },
+          {
+            "property_type": "Condo Apartment",
+            "n": 473,
+            "baseline": 10.94550998161558,
+            "gbm": 4.903760150775946,
+            "nn": 4.807501657824933
+          },
+          {
+            "property_type": "Condo Townhouse",
+            "n": 229,
+            "baseline": 11.047099558862197,
+            "gbm": 4.540600483531808,
+            "nn": 5.313735766045548
+          },
+          {
+            "property_type": "Semi-Detached",
+            "n": 220,
+            "baseline": 12.149532710280374,
+            "gbm": 4.528619865148369,
+            "nn": 5.723132374582089
+          },
+          {
+            "property_type": "Duplex",
+            "n": 77,
+            "baseline": 10.757409440175632,
+            "gbm": 4.961041157936523,
+            "nn": 7.280227421465968
+          },
+          {
+            "property_type": "Link",
+            "n": 35,
+            "baseline": 14.484321411073008,
+            "gbm": 5.541650473743131,
+            "nn": 5.226465416178194
+          },
+          {
+            "property_type": "Common Element Condo",
+            "n": 30,
+            "baseline": 11.414245424303793,
+            "gbm": 5.741578776163789,
+            "nn": 5.24631076073962
+          },
+          {
+            "property_type": "Triplex",
+            "n": 30,
+            "baseline": 13.081919124464958,
+            "gbm": 3.5639091224417796,
+            "nn": 7.201208782691193
+          }
+        ],
+        "price_band": [
+          {
+            "price_band": "< $400K",
+            "n": 526,
+            "baseline": 11.232847807789307,
+            "gbm": 5.4084194208272764,
+            "nn": 5.5358485437532945
+          },
+          {
+            "price_band": "$400-600K",
+            "n": 705,
+            "baseline": 10.842477259130295,
+            "gbm": 4.67295640810301,
+            "nn": 4.775092105263158
+          },
+          {
+            "price_band": "$600-800K",
+            "n": 661,
+            "baseline": 10.872855694284262,
+            "gbm": 4.902033519981597,
+            "nn": 5.17807251908397
+          },
+          {
+            "price_band": "$800K-1.2M",
+            "n": 755,
+            "baseline": 10.456950409739612,
+            "gbm": 4.659153890165692,
+            "nn": 7.152288011695907
+          },
+          {
+            "price_band": "> $1.2M",
+            "n": 204,
+            "baseline": 10.156027358221722,
+            "gbm": 5.16318506240397,
+            "nn": 7.948664228228935
+          }
+        ],
+        "city_region": [
+          {
+            "city_region": "9010 - Kanata - Emerald Meadows/Trailwest",
+            "n": 165,
+            "baseline": 9.48805669452474,
+            "gbm": 5.541650473743131,
+            "nn": 5.802375491480996
+          },
+          {
+            "city_region": "2201 - Orleans - Convent Glen",
+            "n": 151,
+            "baseline": 10.950854700854688,
+            "gbm": 5.376526717136579,
+            "nn": 6.098475302419355
+          },
+          {
+            "city_region": "4401 - Glebe",
+            "n": 145,
+            "baseline": 12.246278755074425,
+            "gbm": 5.271891261281534,
+            "nn": 5.950791139240506
+          },
+          {
+            "city_region": "3701 - Alta Vista",
+            "n": 144,
+            "baseline": 11.14943975827772,
+            "gbm": 4.390785378808996,
+            "nn": 5.914992287731646
+          },
+          {
+            "city_region": "4801 - Old Ottawa South",
+            "n": 133,
+            "baseline": 10.902409949119022,
+            "gbm": 4.953583685631238,
+            "nn": 6.770766590389016
+          },
+          {
+            "city_region": "1105 - Fallingbrook/Pineview",
+            "n": 133,
+            "baseline": 8.975625823451896,
+            "gbm": 4.46038955147141,
+            "nn": 6.83799889135255
+          },
+          {
+            "city_region": "9008 - Kanata - Morgan's Grant/South March",
+            "n": 132,
+            "baseline": 10.726600659406957,
+            "gbm": 4.430191985263774,
+            "nn": 6.381465363185224
+          },
+          {
+            "city_region": "4103 - Ottawa Centre",
+            "n": 131,
+            "baseline": 11.047099558862197,
+            "gbm": 5.225149884905366,
+            "nn": 6.164551767676767
+          },
+          {
+            "city_region": "7704 - Barrhaven - Heritage Park",
+            "n": 129,
+            "baseline": 10.289855072463768,
+            "gbm": 5.045909230848735,
+            "nn": 5.2227461636828645
+          },
+          {
+            "city_region": "1118 - Avalon/Notting Gate/Fallingbrook",
+            "n": 128,
+            "baseline": 10.342359165888567,
+            "gbm": 4.194684332928392,
+            "nn": 5.483559682187731
+          },
+          {
+            "city_region": "4601 - Hintonburg/Mechanicsville",
+            "n": 128,
+            "baseline": 9.475713169302802,
+            "gbm": 5.414375295027734,
+            "nn": 5.235388734812467
+          },
+          {
+            "city_region": "4001 - Lower Town/Byward Market",
+            "n": 126,
+            "baseline": 11.37663533973479,
+            "gbm": 5.020120074130277,
+            "nn": 4.59685964438514
+          },
+          {
+            "city_region": "5003 - Westboro/Hampton Park",
+            "n": 125,
+            "baseline": 9.354213149279571,
+            "gbm": 4.581946580112276,
+            "nn": 7.480347593582888
+          },
+          {
+            "city_region": "7301 - Nepean - Centrepointe",
+            "n": 125,
+            "baseline": 9.321166638239815,
+            "gbm": 4.911981718441382,
+            "nn": 5.118110294117647
+          },
+          {
+            "city_region": "7711 - Barrhaven - Half Moon Bay",
+            "n": 125,
+            "baseline": 10.641233170233203,
+            "gbm": 4.883459432551281,
+            "nn": 4.774186893203884
+          }
+        ]
+      }
+    }
+  }
+}

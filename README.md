@@ -10,8 +10,9 @@ It will power a "What's my home worth?" tool on [mertmetin.ca](https://mertmetin
 so the models only use what a homeowner knows about their home. They never see
 list price, days on market or the list-to-sale ratio.
 
-> **Status:** pipeline complete and tested on synthetic data. Results on the
-> real Ottawa sales are in progress.
+> **Status:** research pipeline complete; the production service (estimate
+> API, nightly recalibration, monthly retrain behind a promotion gate) runs on
+> the server next to the data. Real-data results are not published yet.
 
 ## The problem
 
@@ -117,6 +118,64 @@ Coming next.
 
 Full tables: [results/sample/results.md](results/sample/results.md).
 
+## Production
+
+The served model is LightGBM on the property, location and market features
+plus the update questions a homeowner can answer (roof, windows, furnace, A/C,
+kitchen, bathrooms, flooring, owned or rented water heater). In training those
+update features come from what each listing description says; at serving time
+they come from the owner's answers. Descriptions and photos help the research
+model, but a homeowner has neither, so the served model doesn't use them.
+
+```
+ sold_listings (Postgres) ──nightly──> history snapshot ──> FastAPI /v1/estimate
+            │                              │
+            └──monthly──> candidate ──gate──> registry (versions, CURRENT)
+                                           └──> drift.jsonl, promotions.jsonl
+```
+
+**Model registry** (`src/registry.py`): each version is a directory with the
+three LightGBM models, a card (data window, code version, gate metrics, a
+drift reference of the training data) and its nightly calibration. `CURRENT`
+names the served version and is rewritten atomically, so promotion and
+rollback (`python -m src.pipeline rollback`) are a one-line switch.
+
+**Monthly retrain with a promotion gate** (`python -m src.pipeline retrain`):
+the newest 45 days of sales are held out, a candidate is trained on the rest,
+and the candidate and the served model are scored on held-out sales neither has
+seen. The candidate is promoted only if its median error is within 0.25 points
+of the served model's, its within-10% share within 2 points, its calibrated
+range covers at least 70% of those sales, and its error is under a 10% sanity
+limit. A promoted candidate is refit on every sale before it is saved. Every
+decision, promoted or rejected, is logged.
+
+**Nightly** (`python -m src.pipeline nightly`): new sales refresh the history
+snapshot the API uses for market features; the served model is scored on the
+sales it has never seen (median error, within 10%, bias, range coverage); input
+drift is measured as the population stability index of key features for recent
+sales and for the homes people asked about; and the 80% range is recalibrated
+on the newest 2,000 sales its quantile models never saw. The research runs
+showed coverage slipping from 79% to 72% over three months without it.
+
+**API** (`src/api.py`): `POST /v1/estimate` takes the answers using the
+website's question keys plus a location and returns the estimate, a low–high
+range, the model version and what each answer moved the estimate by ("a
+double garage adds about $38,000"). It reloads a new model or snapshot within
+a minute without restarting. Requests are logged for drift checks without the
+address, with the location rounded to about a kilometre. It returns no sold
+prices or comparables, only counts.
+
+```bash
+uvicorn src.api:app --port 8000
+curl -s localhost:8000/v1/estimate -H 'Content-Type: application/json' -d '{
+  "property_type": "Townhome", "lat": 45.2766, "lng": -75.7438, "bedrooms": 3, "bathrooms": 3,
+  "hv_sqft": "1500-2000", "hv_age": "16-30", "hv_basement": "Finished", "hv_garage": "1",
+  "hv_upd_roof": "lt5", "hv_central_air": 1}'
+```
+
+On the server, `scripts/run_job.sh nightly|retrain` runs a job in Docker from
+cron; `.env` (never in git) holds `DATABASE_URL` and `OHV_API_KEY`.
+
 ## Limitations
 
 * The calibrated range holds 80% coverage in the first month after training
@@ -125,8 +184,9 @@ Full tables: [results/sample/results.md](results/sample/results.md).
 * Two years of history, all in one fairly flat market. No test yet of a sharp
   turn like 2022.
 * Size is a range, not a number, and age is missing for three sales in four.
-* No condition, renovation or photo information. Two homes that look the same
-  on paper can sell 15% apart.
+* The served model knows a home's condition only through the owner's update
+  answers. Descriptions and listing photos help in research, but a homeowner
+  has neither (photo upload is a possible next step).
 * O-Train station coordinates in `data/otrain_stations.csv` are approximate
   (within a block); the Line 1 east and west extensions are not included yet.
 * Sold prices are VOW data: the public tool will show estimates and ranges, not
@@ -153,7 +213,14 @@ reads the `sold_listings` archive instead.
 | `src/train_gbm.py` | LightGBM point + quantile models |
 | `src/train_nn.py` | the MLP |
 | `src/evaluate.py` | splits, metrics, breakdowns, charts |
+| `src/text.py`, `src/photos.py` | description and photo features (research) |
+| `src/homeowner.py` | a homeowner's answers -> one model row, and what each answer is worth |
+| `src/registry.py` | model versions, promotion, rollback |
+| `src/pipeline.py` | monthly retrain + gate, nightly drift + recalibration |
+| `src/drift.py` | accuracy on unseen sales, PSI input drift |
+| `src/api.py` | the FastAPI estimate service |
 | `scripts/make_sample.py` | the synthetic dataset |
+| `scripts/run_job.sh` | a pipeline job in Docker, for cron |
 
 ## License
 

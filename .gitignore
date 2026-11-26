@@ -21,3 +21,6 @@ __pycache__/
 .DS_Store
 *.egg-info/
 !data/sample_photos/
+
+# Production logs (requests, drift) come from real data.
+logs/

@@ -12,4 +12,6 @@ ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 HF_HOME=/app/models/hf
 COPY pyproject.toml README.md ./
 RUN mkdir src && touch src/__init__.py \
  && pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[db,api,photos]"
+# LightGBM's OpenMP runtime (torch used to bring its own copy along).
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
 COPY . .

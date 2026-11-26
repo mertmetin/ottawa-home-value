@@ -4,3 +4,7 @@ results/real
 models
 **/__pycache__
 *.egg-info
+.env
+data/raw
+logs
+results/real*

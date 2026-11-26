@@ -11,12 +11,16 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-try:
-    # Load PyTorch's OpenMP runtime before LightGBM's. The other order makes
-    # the first torch op segfault on macOS (two libomp copies in one process).
-    import torch  # noqa: F401
-except ImportError:
-    pass
+import sys
+
+if sys.platform == "darwin":
+    try:
+        # Load PyTorch's OpenMP runtime before LightGBM's. The other order makes
+        # the first torch op segfault on macOS (two libomp copies in one process).
+        # Linux doesn't need it, and the API shouldn't carry torch's memory.
+        import torch  # noqa: F401
+    except ImportError:
+        pass
 import lightgbm as lgb
 import numpy as np
 import pandas as pd

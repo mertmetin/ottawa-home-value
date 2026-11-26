@@ -32,7 +32,9 @@ log = logging.getLogger("evaluate")
 
 PRICE_BANDS = [0, 400_000, 600_000, 800_000, 1_200_000, np.inf]
 BAND_LABELS = ["< $400K", "$400-600K", "$600-800K", "$800K-1.2M", "> $1.2M"]
-MODEL_NAMES = {"baseline": "Comps baseline", "gbm": "LightGBM", "nn": "Neural net (MLP)", "tabpfn": "TabPFN"}
+MODEL_NAMES = {"baseline": "Comps baseline", "gbm": "LightGBM", "nn": "Neural net (MLP)", "tabpfn": "TabPFN",
+               "gbm_notax": "LightGBM, no taxes"}
+NO_TAX = [f for f in F.FEATURES if f not in ("tax_annual", "tax_years_old")]
 TABPFN_MAX_TRAIN = 10_000
 
 
@@ -98,7 +100,7 @@ def run_tabpfn(train: pd.DataFrame, test: pd.DataFrame) -> np.ndarray:
     from tabpfn import TabPFNRegressor  # optional: pip install .[tabpfn]
 
     tr = train.sort_values("sale_date").tail(TABPFN_MAX_TRAIN)  # TabPFN's sample limit: keep the newest
-    g = train_gbm.GBM(categories={c: sorted(tr[c].dropna().astype(str).unique()) for c in F.CATEGORICAL})
+    g = train_gbm.GBM(categories={c: sorted(tr[c].dropna().astype(str).unique()) for c in F.CATEGORICAL})  # encoder only
 
     def enc(x):
         X = g.frame(x)
@@ -122,12 +124,27 @@ def run_split(train: pd.DataFrame, test: pd.DataFrame, models: list[str]) -> tup
         out = g.predict(test)
         preds["gbm"] = out["estimate"].to_numpy()
         y = test["close_price"].to_numpy()
+        raw = np.exp(g.raw(test))
+        inside = (y >= out["lo"].to_numpy()) & (y <= out["hi"].to_numpy())
+        width = ((out["hi"] - out["lo"]) / out["estimate"]).to_numpy()
         extra["gbm_range"] = {
-            "coverage_10_90": float(np.mean((y >= out["lo"]) & (y <= out["hi"])) * 100),
-            "median_width_pct": float(np.median((out["hi"] - out["lo"]) / out["estimate"]) * 100),
+            "coverage_raw": float(np.mean((y >= raw["lo"]) & (y <= raw["hi"])) * 100),
+            "width_raw": float(np.median((raw["hi"] - raw["lo"]) / raw["mid"]) * 100),
+            "coverage_10_90": float(np.mean(inside) * 100),
+            "median_width_pct": float(np.median(width) * 100),
+            "calib": {k: round(v, 4) for k, v in g.calib.items()},
         }
+        by = {}
+        for col in ("type_group", "price_band"):
+            for key, idx in test.groupby(test[col].astype("object")).indices.items():
+                if len(idx) >= 20:
+                    by[f"{col}={key}"] = {"n": int(len(idx)), "coverage": float(inside[idx].mean() * 100),
+                                          "width": float(np.median(width[idx]) * 100)}
+        extra["gbm_range"]["by"] = by
         extra["gbm_importance"] = g.importance().head(15).round(1).to_dict()
         extra["gbm_trees"] = g.models["mid"].num_trees()
+    if "gbm_notax" in models:
+        preds["gbm_notax"] = train_gbm.fit(train, features=NO_TAX).predict(test)["estimate"].to_numpy()
     if "nn" in models:
         t = time.time()
         n = train_nn.fit(train)
@@ -176,8 +193,12 @@ def write_report(out: Path, source: str, cleaning: list[dict], results: dict) ->
                       f"{s['within_10']:.1f}% | {s['bias']:+.1f}% |")
         if "gbm_range" in r["extra"]:
             gr = r["extra"]["gbm_range"]
-            md += ["", f"LightGBM 10-90% range: contains the sale price {gr['coverage_10_90']:.1f}% of the time "
-                       f"(target 80%), median width {gr['median_width_pct']:.1f}% of the estimate."]
+            md += ["", "### LightGBM range (target: contains the sale price 80% of the time)", "",
+                   "| | Contains sale price | Median width |", "|---|---|---|",
+                   f"| Raw 10-90% quantile models | {gr['coverage_raw']:.1f}% | {gr['width_raw']:.1f}% |",
+                   f"| Calibrated (conformal) | {gr['coverage_10_90']:.1f}% | {gr['median_width_pct']:.1f}% |"]
+            md += [f"| ... {k.replace('type_group=', '').replace('price_band=', '')} ({v['n']:,}) | "
+                   f"{v['coverage']:.1f}% | {v['width']:.1f}% |" for k, v in gr["by"].items()]
         for by, title in (("property_type", "By property type"), ("price_band", "By price band"),
                           ("city_region", "By neighbourhood (15 largest in the test set)")):
             t = r["breakdowns"][by]
@@ -188,7 +209,7 @@ def write_report(out: Path, source: str, cleaning: list[dict], results: dict) ->
 
 
 # Reference categorical palette, fixed order (dataviz skill, light mode).
-SERIES = {"baseline": "#2a78d6", "gbm": "#eb6834", "nn": "#1baf7a", "tabpfn": "#eda100"}
+SERIES = {"baseline": "#2a78d6", "gbm": "#eb6834", "nn": "#1baf7a", "tabpfn": "#eda100", "gbm_notax": "#e87ba4"}
 INK, INK2, GRID, SURFACE = "#0b0b0b", "#52514e", "#e6e5e1", "#fcfcfb"
 
 
@@ -272,7 +293,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", default="data/sample.csv", help="CSV path, or 'db' for DATABASE_URL")
     ap.add_argument("--out", default="results/sample")
-    ap.add_argument("--models", default="baseline,gbm,nn", help="comma list of baseline,gbm,nn,tabpfn")
+    ap.add_argument("--models", default="baseline,gbm,nn,gbm_notax",
+                    help="comma list of baseline,gbm,nn,gbm_notax,tabpfn")
     ap.add_argument("--test-months", type=int, default=3)
     ap.add_argument("--shift-months", type=int, default=12)
     a = ap.parse_args()

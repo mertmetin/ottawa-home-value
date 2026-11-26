@@ -53,3 +53,30 @@ def test_unseen_category_does_not_crash(frame):
     t["city_region"] = "9999 - Nowhere"
     g = train_gbm.fit(train, rounds=50)
     assert np.isfinite(g.predict(t)["estimate"]).all()
+
+
+def test_conformal_quantile():
+    s = np.arange(1, 101) / 100  # 0.01 .. 1.00
+    assert train_gbm.conformal(s, 0.8) == pytest.approx(0.81)  # ceil(101 * 0.8) / 100 -> 81st score
+    assert train_gbm.conformal(-s, 0.8) == 0.0                  # already covering: never narrows
+    assert train_gbm.conformal(np.array([]), 0.8) == 0.0
+
+
+def test_calibration_widens_range_toward_target(frame):
+    train, test, _ = evaluate.splits(frame)["shift"]
+    g = train_gbm.fit(train, rounds=400)
+    assert g.calib["all"] >= 0
+    y = test["close_price"].to_numpy()
+    raw = np.exp(g.raw(test))
+    cal = g.predict(test)
+    cov_raw = np.mean((y >= raw["lo"]) & (y <= raw["hi"]))
+    cov_cal = np.mean((y >= cal["lo"]) & (y <= cal["hi"]))
+    assert cov_cal >= cov_raw
+    assert cov_cal > 0.7
+
+
+def test_gbm_without_taxes(frame):
+    train, test, _ = evaluate.splits(frame)["recent"]
+    g = train_gbm.fit(train, rounds=200, features=evaluate.NO_TAX)
+    assert "tax_annual" not in g.models["mid"].feature_name()
+    assert np.isfinite(g.predict(test)["estimate"]).all()

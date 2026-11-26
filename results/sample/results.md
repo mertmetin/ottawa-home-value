@@ -23,44 +23,56 @@ Train 5,461 sales, test 397.
 |---|---|---|---|---|---|
 | Comps baseline | $88,382 | 10.5% | 24.4% | 47.1% | +4.9% |
 | LightGBM | $36,554 | 4.4% | 54.4% | 86.4% | +1.7% |
+| LightGBM, no taxes | $59,429 | 7.2% | 38.8% | 63.2% | +2.5% |
 | Neural net (MLP) | $37,609 | 4.4% | 53.7% | 85.1% | +0.8% |
 
-LightGBM 10-90% range: contains the sale price 71.0% of the time (target 80%), median width 14.2% of the estimate.
+### LightGBM range (target: contains the sale price 80% of the time)
+
+| | Contains sale price | Median width |
+|---|---|---|
+| Raw 10-90% quantile models | 71.0% | 14.2% |
+| Calibrated (conformal) | 82.4% | 18.0% |
+| ... condo (85) | 82.4% | 21.7% |
+| ... freehold (312) | 82.4% | 17.5% |
+| ... $400-600K (104) | 82.7% | 17.8% |
+| ... $600-800K (103) | 82.5% | 16.5% |
+| ... $800K-1.2M (108) | 86.1% | 17.5% |
+| ... < $400K (69) | 73.9% | 22.3% |
 
 ### By property type (median abs % error)
 
-| property_type | n | Comps baseline | LightGBM | Neural net (MLP) |
-|---|---|---|---|---|
-| Detached | 176 | 10.1% | 4.9% | 4.9% |
-| Att/Row/Townhouse | 80 | 9.6% | 4.3% | 3.9% |
-| Condo Apartment | 49 | 12.0% | 4.9% | 4.8% |
-| Semi-Detached | 42 | 12.3% | 2.9% | 3.7% |
-| Condo Townhouse | 34 | 11.5% | 4.0% | 4.5% |
+| property_type | n | Comps baseline | LightGBM | LightGBM, no taxes | Neural net (MLP) |
+|---|---|---|---|---|---|
+| Detached | 176 | 10.1% | 4.9% | 7.1% | 4.9% |
+| Att/Row/Townhouse | 80 | 9.6% | 4.3% | 7.4% | 3.9% |
+| Condo Apartment | 49 | 12.0% | 4.9% | 6.4% | 4.8% |
+| Semi-Detached | 42 | 12.3% | 2.9% | 7.4% | 3.7% |
+| Condo Townhouse | 34 | 11.5% | 4.0% | 8.3% | 4.5% |
 
 ### By price band (median abs % error)
 
-| price_band | n | Comps baseline | LightGBM | Neural net (MLP) |
-|---|---|---|---|---|
-| < $400K | 69 | 12.0% | 4.2% | 5.4% |
-| $400-600K | 104 | 11.3% | 4.5% | 4.2% |
-| $600-800K | 103 | 10.4% | 4.4% | 4.0% |
-| $800K-1.2M | 108 | 9.9% | 4.0% | 4.6% |
-| > $1.2M | 13 | 10.1% | 5.4% | 4.1% |
+| price_band | n | Comps baseline | LightGBM | LightGBM, no taxes | Neural net (MLP) |
+|---|---|---|---|---|---|
+| < $400K | 69 | 12.0% | 4.2% | 9.2% | 5.4% |
+| $400-600K | 104 | 11.3% | 4.5% | 7.8% | 4.2% |
+| $600-800K | 103 | 10.4% | 4.4% | 7.6% | 4.0% |
+| $800K-1.2M | 108 | 9.9% | 4.0% | 6.1% | 4.6% |
+| > $1.2M | 13 | 10.1% | 5.4% | 5.7% | 4.1% |
 
 ### By neighbourhood (15 largest in the test set) (median abs % error)
 
-| city_region | n | Comps baseline | LightGBM | Neural net (MLP) |
-|---|---|---|---|---|
-| 7704 - Barrhaven - Heritage Park | 26 | 12.7% | 5.2% | 3.8% |
-| 4001 - Lower Town/Byward Market | 24 | 12.0% | 3.9% | 4.0% |
-| 4801 - Old Ottawa South | 23 | 15.6% | 5.7% | 5.9% |
-| 9008 - Kanata - Morgan's Grant/South March | 23 | 7.5% | 3.9% | 4.9% |
-| 2201 - Orleans - Convent Glen | 22 | 16.5% | 4.6% | 4.5% |
-| 9010 - Kanata - Emerald Meadows/Trailwest | 21 | 9.7% | 4.9% | 5.0% |
-| 3701 - Alta Vista | 20 | 13.1% | 4.3% | 5.4% |
-| 4401 - Glebe | 20 | 8.5% | 4.6% | 3.5% |
-| 4601 - Hintonburg/Mechanicsville | 20 | 5.8% | 5.1% | 4.1% |
-| 5003 - Westboro/Hampton Park | 20 | 7.2% | 4.2% | 4.4% |
+| city_region | n | Comps baseline | LightGBM | LightGBM, no taxes | Neural net (MLP) |
+|---|---|---|---|---|---|
+| 7704 - Barrhaven - Heritage Park | 26 | 12.7% | 5.2% | 8.2% | 3.8% |
+| 4001 - Lower Town/Byward Market | 24 | 12.0% | 3.9% | 5.9% | 4.0% |
+| 4801 - Old Ottawa South | 23 | 15.6% | 5.7% | 7.8% | 5.9% |
+| 9008 - Kanata - Morgan's Grant/South March | 23 | 7.5% | 3.9% | 4.0% | 4.9% |
+| 2201 - Orleans - Convent Glen | 22 | 16.5% | 4.6% | 7.4% | 4.5% |
+| 9010 - Kanata - Emerald Meadows/Trailwest | 21 | 9.7% | 4.9% | 6.3% | 5.0% |
+| 3701 - Alta Vista | 20 | 13.1% | 4.3% | 7.1% | 5.4% |
+| 4401 - Glebe | 20 | 8.5% | 4.6% | 4.3% | 3.5% |
+| 4601 - Hintonburg/Mechanicsville | 20 | 5.8% | 5.1% | 4.7% | 4.1% |
+| 5003 - Westboro/Hampton Park | 20 | 7.2% | 4.2% | 12.6% | 4.4% |
 
 ## Split: shift
 
@@ -71,50 +83,63 @@ Train 3,007 sales, test 2,851.
 |---|---|---|---|---|---|
 | Comps baseline | $91,279 | 10.8% | 23.8% | 46.9% | +0.5% |
 | LightGBM | $40,792 | 4.9% | 50.8% | 83.2% | +2.2% |
+| LightGBM, no taxes | $64,911 | 7.8% | 33.9% | 61.4% | +0.2% |
 | Neural net (MLP) | $51,360 | 5.8% | 43.9% | 76.1% | -2.3% |
 
-LightGBM 10-90% range: contains the sale price 67.9% of the time (target 80%), median width 13.7% of the estimate.
+### LightGBM range (target: contains the sale price 80% of the time)
+
+| | Contains sale price | Median width |
+|---|---|---|
+| Raw 10-90% quantile models | 67.9% | 13.7% |
+| Calibrated (conformal) | 78.4% | 17.3% |
+| ... condo (732) | 75.4% | 18.7% |
+| ... freehold (2,119) | 79.5% | 16.9% |
+| ... $400-600K (705) | 79.9% | 17.3% |
+| ... $600-800K (661) | 83.4% | 16.7% |
+| ... $800K-1.2M (755) | 81.1% | 16.2% |
+| ... < $400K (526) | 65.0% | 18.8% |
+| ... > $1.2M (204) | 82.4% | 25.2% |
 
 ### By property type (median abs % error)
 
-| property_type | n | Comps baseline | LightGBM | Neural net (MLP) |
-|---|---|---|---|---|
-| Detached | 1,253 | 10.3% | 5.0% | 6.2% |
-| Att/Row/Townhouse | 504 | 10.7% | 4.9% | 5.5% |
-| Condo Apartment | 473 | 10.9% | 4.9% | 4.8% |
-| Condo Townhouse | 229 | 11.0% | 4.5% | 5.3% |
-| Semi-Detached | 220 | 12.1% | 4.5% | 5.7% |
-| Duplex | 77 | 10.8% | 5.0% | 7.3% |
-| Link | 35 | 14.5% | 5.5% | 5.2% |
-| Common Element Condo | 30 | 11.4% | 5.7% | 5.2% |
-| Triplex | 30 | 13.1% | 3.6% | 7.2% |
+| property_type | n | Comps baseline | LightGBM | LightGBM, no taxes | Neural net (MLP) |
+|---|---|---|---|---|---|
+| Detached | 1,253 | 10.3% | 5.0% | 7.7% | 6.2% |
+| Att/Row/Townhouse | 504 | 10.7% | 4.9% | 8.1% | 5.5% |
+| Condo Apartment | 473 | 10.9% | 4.9% | 7.1% | 4.8% |
+| Condo Townhouse | 229 | 11.0% | 4.5% | 8.0% | 5.3% |
+| Semi-Detached | 220 | 12.1% | 4.5% | 7.8% | 5.7% |
+| Duplex | 77 | 10.8% | 5.0% | 7.9% | 7.3% |
+| Link | 35 | 14.5% | 5.5% | 9.6% | 5.2% |
+| Common Element Condo | 30 | 11.4% | 5.7% | 7.2% | 5.2% |
+| Triplex | 30 | 13.1% | 3.6% | 9.1% | 7.2% |
 
 ### By price band (median abs % error)
 
-| price_band | n | Comps baseline | LightGBM | Neural net (MLP) |
-|---|---|---|---|---|
-| < $400K | 526 | 11.2% | 5.4% | 5.5% |
-| $400-600K | 705 | 10.8% | 4.7% | 4.8% |
-| $600-800K | 661 | 10.9% | 4.9% | 5.2% |
-| $800K-1.2M | 755 | 10.5% | 4.7% | 7.2% |
-| > $1.2M | 204 | 10.2% | 5.2% | 7.9% |
+| price_band | n | Comps baseline | LightGBM | LightGBM, no taxes | Neural net (MLP) |
+|---|---|---|---|---|---|
+| < $400K | 526 | 11.2% | 5.4% | 8.2% | 5.5% |
+| $400-600K | 705 | 10.8% | 4.7% | 7.3% | 4.8% |
+| $600-800K | 661 | 10.9% | 4.9% | 7.9% | 5.2% |
+| $800K-1.2M | 755 | 10.5% | 4.7% | 7.4% | 7.2% |
+| > $1.2M | 204 | 10.2% | 5.2% | 8.4% | 7.9% |
 
 ### By neighbourhood (15 largest in the test set) (median abs % error)
 
-| city_region | n | Comps baseline | LightGBM | Neural net (MLP) |
-|---|---|---|---|---|
-| 9010 - Kanata - Emerald Meadows/Trailwest | 165 | 9.5% | 5.5% | 5.8% |
-| 2201 - Orleans - Convent Glen | 151 | 11.0% | 5.4% | 6.1% |
-| 4401 - Glebe | 145 | 12.2% | 5.3% | 6.0% |
-| 3701 - Alta Vista | 144 | 11.1% | 4.4% | 5.9% |
-| 4801 - Old Ottawa South | 133 | 10.9% | 5.0% | 6.8% |
-| 1105 - Fallingbrook/Pineview | 133 | 9.0% | 4.5% | 6.8% |
-| 9008 - Kanata - Morgan's Grant/South March | 132 | 10.7% | 4.4% | 6.4% |
-| 4103 - Ottawa Centre | 131 | 11.0% | 5.2% | 6.2% |
-| 7704 - Barrhaven - Heritage Park | 129 | 10.3% | 5.0% | 5.2% |
-| 1118 - Avalon/Notting Gate/Fallingbrook | 128 | 10.3% | 4.2% | 5.5% |
-| 4601 - Hintonburg/Mechanicsville | 128 | 9.5% | 5.4% | 5.2% |
-| 4001 - Lower Town/Byward Market | 126 | 11.4% | 5.0% | 4.6% |
-| 5003 - Westboro/Hampton Park | 125 | 9.4% | 4.6% | 7.5% |
-| 7301 - Nepean - Centrepointe | 125 | 9.3% | 4.9% | 5.1% |
-| 7711 - Barrhaven - Half Moon Bay | 125 | 10.6% | 4.9% | 4.8% |
+| city_region | n | Comps baseline | LightGBM | LightGBM, no taxes | Neural net (MLP) |
+|---|---|---|---|---|---|
+| 9010 - Kanata - Emerald Meadows/Trailwest | 165 | 9.5% | 5.5% | 6.6% | 5.8% |
+| 2201 - Orleans - Convent Glen | 151 | 11.0% | 5.4% | 8.1% | 6.1% |
+| 4401 - Glebe | 145 | 12.2% | 5.3% | 6.5% | 6.0% |
+| 3701 - Alta Vista | 144 | 11.1% | 4.4% | 7.2% | 5.9% |
+| 4801 - Old Ottawa South | 133 | 10.9% | 5.0% | 7.5% | 6.8% |
+| 1105 - Fallingbrook/Pineview | 133 | 9.0% | 4.5% | 7.9% | 6.8% |
+| 9008 - Kanata - Morgan's Grant/South March | 132 | 10.7% | 4.4% | 7.6% | 6.4% |
+| 4103 - Ottawa Centre | 131 | 11.0% | 5.2% | 9.1% | 6.2% |
+| 7704 - Barrhaven - Heritage Park | 129 | 10.3% | 5.0% | 8.9% | 5.2% |
+| 1118 - Avalon/Notting Gate/Fallingbrook | 128 | 10.3% | 4.2% | 7.9% | 5.5% |
+| 4601 - Hintonburg/Mechanicsville | 128 | 9.5% | 5.4% | 7.9% | 5.2% |
+| 4001 - Lower Town/Byward Market | 126 | 11.4% | 5.0% | 8.1% | 4.6% |
+| 5003 - Westboro/Hampton Park | 125 | 9.4% | 4.6% | 7.5% | 7.5% |
+| 7301 - Nepean - Centrepointe | 125 | 9.3% | 4.9% | 8.2% | 5.1% |
+| 7711 - Barrhaven - Half Moon Bay | 125 | 10.6% | 4.9% | 7.3% | 4.8% |

@@ -90,6 +90,12 @@ def test_psi_sees_a_shift():
     assert same["sqft_mid"] < 0.05 and moved["sqft_mid"] > 0.25 and moved["property_type"] > 0.25
 
 
+def test_condo_floor_from_unit():
+    f = __import__("src.features", fromlist=["x"]).floor_of(pd.Series(["1204", "305", "PH2", "7", "", "B12"]))
+    assert f["floor"].tolist()[:2] == [12, 3] and f["floor"].iloc[2:].isna().all()
+    assert f["penthouse"].tolist() == [0, 0, 1, 0, 0, 0]
+
+
 def test_answers_map_to_features():
     a = {"property_type": "Townhome", "hv_condo_fee": 350, "hv_upd_roof": "lt5", "hv_upd_windows": "orig",
          "hv_hwt": "rental", "hv_garage": "1", "hv_central_air": 1, "hv_sqft": "unknown"}
@@ -129,6 +135,9 @@ def test_api_estimates_and_reloads(first, world):
     assert e["city_region"] and e["comps"] > 0
     assert {x["key"] for x in e["answers"]} == {"hv_upd_roof", "hv_upd_kitchen", "hv_garage", "hv_central_air", "hv_age"}
     assert "close_price" not in json.dumps(e)
+    # the site never sends a lot: typical nearby lot is filled in for houses
+    x = homeowner.build(body, snap)
+    assert x.attrs["lot_filled"] and x["lot_width"].iloc[0] > 0
     bigger = c.post("/v1/estimate", json={**body, "hv_sqft": "2500-3000", "explain": False}).json()
     assert bigger["estimate"] > e["estimate"]
     assert c.post("/v1/estimate", json={**body, "property_type": "Castle"}).status_code == 422

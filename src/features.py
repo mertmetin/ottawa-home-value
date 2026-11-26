@@ -313,6 +313,73 @@ def baseline_estimate(x: pd.DataFrame) -> np.ndarray:
 
 
 # --------------------------------------------------------------------------
+# End units (townhouses): the description says so, or the lot is clearly wider
+# than the narrowest townhouse lots on the same street (the interior units).
+# On Ottawa sales the two agree about 3 times in 4.
+# --------------------------------------------------------------------------
+
+TOWN_TYPES = {"Att/Row/Townhouse", "Condo Townhouse"}
+END_RX = r"\bend[- ]unit|\bend[- ]town|\bcorner[- ]unit|\bend[- ]row|\bend of (?:the )?row"
+END_WIDER_FT = 4.0
+STREET_MIN = 4  # townhouse lots on a street before its "narrowest" means anything
+
+
+def street_key(address: pd.Series) -> pd.Series:
+    """'4-560 Prominence Way' -> 'PROMINENCE WAY' (number and unit dropped)."""
+    return (address.fillna("").str.upper().str.replace(r"^[\dA-Z-]*\d+[A-Z]?\s+", "", regex=True)
+            .str.replace(r"[^A-Z0-9 ]", "", regex=True).str.strip())
+
+
+def usable_width(w: pd.Series) -> pd.Series:
+    return pd.to_numeric(w, errors="coerce").where(lambda v: v.between(10, 80))
+
+
+def end_unit_features(x: pd.DataFrame) -> pd.DataFrame:
+    """end_unit (1/0 for townhouses, missing for other types). Lot widths are
+    facts about homes, not prices, so using every sale on the street is fine."""
+    out = x.copy()
+    town = out["property_type"].isin(TOWN_TYPES)
+    said = out["remarks"].fillna("").str.lower().str.contains(END_RX, regex=True) if "remarks" in out \
+        else pd.Series(False, index=out.index)
+    w = usable_width(out["lot_width"])
+    key = street_key(out["address"]) + "|" + out["property_type"].astype(str)
+    grp = w.where(town).groupby(key)
+    p25 = grp.transform(lambda v: v.quantile(0.25))
+    n = grp.transform("count")
+    wide = (w - p25 >= END_WIDER_FT) & (n >= STREET_MIN)
+    out["end_unit"] = np.where(town, (said | wide).astype(float), np.nan)
+    return out
+
+
+# --------------------------------------------------------------------------
+# Condo floor, from the unit number: 1204 -> 12, 305 -> 3, PH2 -> penthouse.
+# Ottawa buildings number units floor + two digits; 1-2 digit units are
+# usually townhouse-style or ground-level, so they stay unknown.
+# --------------------------------------------------------------------------
+
+def unit_of(address: pd.Series) -> pd.Series:
+    """'1204-160 George St' -> '1204' (data._address puts the unit first)."""
+    return address.fillna("").str.extract(r"^([0-9A-Za-z]+)-\d", expand=False)
+
+
+def floor_of(unit: pd.Series) -> pd.DataFrame:
+    u = unit.fillna("").astype(str).str.upper().str.strip()
+    ph = u.str.startswith("PH")
+    digits = pd.to_numeric(u.str.extract(r"^(\d{3,4})$", expand=False), errors="coerce")
+    floor = (digits // 100).where(digits >= 100)
+    return pd.DataFrame({"floor": floor.where(floor.between(1, 45)), "penthouse": ph.astype(float)}, index=unit.index)
+
+
+def condo_floor_features(x: pd.DataFrame) -> pd.DataFrame:
+    out = x.copy()
+    apt = out["property_type"] == "Condo Apartment"
+    f = floor_of(unit_of(out["address"]))
+    out["floor"] = f["floor"].where(apt)
+    out["penthouse"] = f["penthouse"].where(apt)
+    return out
+
+
+# --------------------------------------------------------------------------
 # Extra information: descriptions and photos (research feature sets)
 # --------------------------------------------------------------------------
 

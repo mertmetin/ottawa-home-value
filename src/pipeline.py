@@ -12,7 +12,10 @@ Retrain and the promotion gate
 The newest GATE_DAYS of sales are held out. A candidate is trained on the
 sales before them, then the candidate and the served model are both scored on
 the held-out sales that neither has seen (those after the served model's data
-ends). The candidate is promoted when
+ends). When too few of those exist (the served model is recent), the served
+model's recipe (its feature list) is retrained on the candidate's sales and
+scored instead, so the comparison is like with like. The candidate is
+promoted when
 
 * its median error is no more than GATE_MDAPE_SLACK points worse,
 * its share within 10% is no more than GATE_WITHIN10_SLACK points lower,
@@ -61,7 +64,7 @@ RECALIB_N = 2000
 RECALIB_MIN = 500
 RECENT_DAYS = 30
 SNAPSHOT_COLS = ["sale_date", "lat", "lng", "city_region", "type_group", "property_type", "ppsf", "close_price",
-                 "parking_total", "garage_spaces"]
+                 "parking_total", "garage_spaces", "lot_width", "lot_depth"]
 
 
 def models_dir() -> Path:
@@ -92,6 +95,7 @@ def prepare(source: str) -> tuple[pd.DataFrame, list[dict]]:
     x = F.build(sales)
     upd = text.update_features(x["remarks"], x["sale_date"].dt.year)
     x[upd.columns] = upd.to_numpy()
+    x = F.condo_floor_features(x)
     return x.sort_values("sale_date").reset_index(drop=True), removed
 
 
@@ -104,8 +108,8 @@ def write_snapshot(x: pd.DataFrame) -> None:
     os.replace(tmp, p)
 
 
-def fit(x: pd.DataFrame, rounds: int = 5000) -> tuple[train_gbm.GBM, dict]:
-    g = train_gbm.fit(x, rounds=rounds, features=homeowner.FEATURES)
+def fit(x: pd.DataFrame, rounds: int = 5000, features: list[str] | None = None) -> tuple[train_gbm.GBM, dict]:
+    g = train_gbm.fit(x, rounds=rounds, features=features or homeowner.FEATURES)
     tr, va = train_gbm.split_valid(x)
     card = {
         "trained_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -153,15 +157,21 @@ def retrain(source: str, force: bool = False, rounds: int = 5000) -> dict:
     cand_g, _ = fit(train, rounds)
 
     cur = reg.current()
-    gate_set, note = hold, "all held-out sales"
+    gate_set, note, ref = hold, "all held-out sales", None
     if cur:
         unseen = hold[hold["sale_date"] > pd.Timestamp(cur.card["data_end"])]
         if len(unseen) >= GATE_MIN:
             gate_set, note = unseen, f"held-out sales after the served model's data ({cur.card['data_end']})"
+            ref = cur.load()
         else:
-            note = f"all held-out sales: only {len(unseen)} are new to the served model, which saw the rest"
+            # The served model saw these sales, so scoring it on them flatters it.
+            # Compare like with like: the served model's recipe (its features)
+            # retrained on exactly the candidate's training sales.
+            note = (f"all held-out sales vs the served model's features retrained on the same sales "
+                    f"(only {len(unseen)} are new to the served model)")
+            ref, _ = fit(train, rounds, features=cur.load().features)
     m_cand = score(cand_g, gate_set)
-    m_cur = score(cur.load(), gate_set) if cur else None
+    m_cur = score(ref, gate_set) if ref is not None else None
     ok, why = gate(m_cand, m_cur)
     result = {"at": time.strftime("%Y-%m-%dT%H:%M:%S"), "gate_set": note, "gate_n": int(len(gate_set)),
               "candidate": m_cand, "served": m_cur, "served_version": cur.name if cur else None,

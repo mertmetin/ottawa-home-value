@@ -68,7 +68,14 @@ leaves earlier rows' features unchanged.
 1. *Comps baseline*: median $/sqft of the 10 nearest recent sales of the same
    type × the home's size. What an agent's quick CMA does.
 2. *LightGBM* on log(price), early-stopped on the newest 10% of training sales,
-   plus 10th and 90th percentile models for a low–high range.
+   plus 10th and 90th percentile models for a low–high range. The raw quantile
+   models are overconfident on new sales, so the range is **calibrated** with
+   conformalized quantile regression (Romano et al., 2019): on the newest 10%
+   of training sales, which the quantile models never saw, measure how far
+   prices fell outside the range and widen it just enough to contain 80% of
+   them, separately per property group and predicted price band.
+   A second LightGBM without the tax features measures how much the model
+   leans on property tax (a proxy for the assessed value).
 3. *MLP* (PyTorch): numeric features log-scaled, imputed with missing flags and
    standardised; an embedding per categorical; 512-256-128 with LayerNorm, SiLU
    and dropout; Huber loss on standardised log(price), AdamW, early stopping.
@@ -84,7 +91,8 @@ leaves earlier rows' features unchanged.
 
 **Metrics**: MAE, median absolute % error (MdAPE), share within 5% and 10%, and
 median bias, overall and by property type, neighbourhood and price band; plus
-how often the LightGBM range contains the sale price.
+how often the LightGBM range contains the sale price, before and after
+calibration.
 
 ## Results
 
@@ -99,9 +107,11 @@ Coming next.
 | Last 3 months | Comps baseline | 10.5% | 47.1% |
 | | LightGBM | 4.4% | 86.4% |
 | | Neural net | 4.4% | 85.1% |
+| | LightGBM, no taxes | 7.2% | 63.2% |
 | Market shift | Comps baseline | 10.8% | 46.9% |
 | | LightGBM | 4.9% | 83.2% |
 | | Neural net | 5.8% | 76.1% |
+| | LightGBM, no taxes | 7.8% | 61.4% |
 
 ![Error by model](results/sample/error_by_model.png)
 
@@ -109,6 +119,9 @@ Full tables: [results/sample/results.md](results/sample/results.md).
 
 ## Limitations
 
+* The calibrated range holds 80% coverage in the first month after training
+  and slips to the low 70s by month three as the market drifts. Production
+  retrains monthly and recalibrates on the newest sales.
 * Two years of history, all in one fairly flat market. No test yet of a sharp
   turn like 2022.
 * Size is a range, not a number, and age is missing for three sales in four.

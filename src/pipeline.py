@@ -1,6 +1,6 @@
 """Production jobs for the served model.
 
-    python -m src.pipeline retrain   # monthly: train a candidate, promote it only if it passes the gate
+    python -m src.pipeline retrain   # weekly: train a candidate, promote it only if it passes the gate
     python -m src.pipeline nightly   # nightly: new sales -> history snapshot, drift log, recalibrated range
     python -m src.pipeline status    # what is served, how it is doing
     python -m src.pipeline rollback  # serve the previous version again

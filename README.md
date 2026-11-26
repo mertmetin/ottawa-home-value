@@ -11,7 +11,7 @@ so the models only use what a homeowner knows about their home. They never see
 list price, days on market or the list-to-sale ratio.
 
 > **Status:** research pipeline complete; the production service (estimate
-> API, nightly recalibration, monthly retrain behind a promotion gate) runs on
+> API, nightly recalibration, weekly retrain behind a promotion gate) runs on
 > the server next to the data. Real-data results are not published yet.
 
 ## The problem
@@ -130,7 +130,7 @@ model, but a homeowner has neither, so the served model doesn't use them.
 ```
  sold_listings (Postgres) ──nightly──> history snapshot ──> FastAPI /v1/estimate
             │                              │
-            └──monthly──> candidate ──gate──> registry (versions, CURRENT)
+            └──weekly───> candidate ──gate──> registry (versions, CURRENT)
                                            └──> drift.jsonl, promotions.jsonl
 ```
 
@@ -140,7 +140,7 @@ drift reference of the training data) and its nightly calibration. `CURRENT`
 names the served version and is rewritten atomically, so promotion and
 rollback (`python -m src.pipeline rollback`) are a one-line switch.
 
-**Monthly retrain with a promotion gate** (`python -m src.pipeline retrain`):
+**Weekly retrain with a promotion gate** (`python -m src.pipeline retrain`):
 the newest 45 days of sales are held out, a candidate is trained on the rest,
 and the candidate and the served model are scored on held-out sales neither has
 seen. The candidate is promoted only if its median error is within 0.25 points
@@ -180,7 +180,7 @@ cron; `.env` (never in git) holds `DATABASE_URL` and `OHV_API_KEY`.
 
 * The calibrated range holds 80% coverage in the first month after training
   and slips to the low 70s by month three as the market drifts. Production
-  retrains monthly and recalibrates on the newest sales.
+  retrains weekly and recalibrates on the newest sales.
 * Two years of history, all in one fairly flat market. No test yet of a sharp
   turn like 2022.
 * Size is a range, not a number, and age is missing for three sales in four.
@@ -216,7 +216,7 @@ reads the `sold_listings` archive instead.
 | `src/text.py`, `src/photos.py` | description and photo features (research) |
 | `src/homeowner.py` | a homeowner's answers -> one model row, and what each answer is worth |
 | `src/registry.py` | model versions, promotion, rollback |
-| `src/pipeline.py` | monthly retrain + gate, nightly drift + recalibration |
+| `src/pipeline.py` | weekly retrain + gate, nightly drift + recalibration |
 | `src/drift.py` | accuracy on unseen sales, PSI input drift |
 | `src/api.py` | the FastAPI estimate service |
 | `scripts/make_sample.py` | the synthetic dataset |
